@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 
+	"github.com/bruin-data/dac/pkg/codex"
 	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/bruin-data/dac/pkg/query"
 	"github.com/bruin-data/dac/pkg/theme"
@@ -33,7 +35,12 @@ type Server struct {
 	themes   *theme.Registry
 	loader   *dashboardLoader
 	watcher  *Watcher
+	codex    *codex.Process
 	mux      *http.ServeMux
+
+	// Maps agent session (thread) IDs to their dashboard name.
+	sessionDashMu sync.RWMutex
+	sessionDash   map[string]string
 }
 
 type dashboardLoader struct {
@@ -73,11 +80,13 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		config:  cfg,
-		backend: cachedBackend,
-		themes:  themes,
-		loader:  &dashboardLoader{dir: cfg.DashboardDir},
-		mux:     http.NewServeMux(),
+		config:      cfg,
+		backend:     cachedBackend,
+		themes:      themes,
+		loader:      &dashboardLoader{dir: cfg.DashboardDir},
+		codex:       codex.New(filepath.Join(cfg.DashboardDir, ".sessions")),
+		mux:         http.NewServeMux(),
+		sessionDash: make(map[string]string),
 	}
 
 	s.setupRoutes()
@@ -89,6 +98,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/v1/dashboards", s.handleListDashboards)
 	s.mux.HandleFunc("GET /api/v1/dashboards/{name}", s.handleGetDashboard)
 	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/data", s.handleBatchQuery)
+	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/stream", s.handleStreamQuery)
 	s.mux.HandleFunc("POST /api/v1/query", s.handleSingleQuery)
 	s.mux.HandleFunc("GET /api/v1/themes", s.handleListThemes)
 	s.mux.HandleFunc("GET /api/v1/themes/{name}", s.handleGetTheme)
@@ -104,6 +114,12 @@ func (s *Server) setupRoutes() {
 		s.mux.HandleFunc("DELETE /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminDeleteConnection))
 		s.mux.HandleFunc("POST /api/v1/admin/connections/{type}/{name}/test", s.requireAdmin(s.handleAdminTestConnection))
 	}
+
+	// Agent routes (codex-powered dashboard editor).
+	s.mux.HandleFunc("POST /api/v1/agent/sessions", s.handleAgentCreateSession)
+	s.mux.HandleFunc("POST /api/v1/agent/sessions/{id}/messages", s.handleAgentSendMessage)
+	s.mux.HandleFunc("GET /api/v1/agent/sessions/{id}/events", s.handleAgentEvents)
+	s.mux.HandleFunc("POST /api/v1/agent/sessions/{id}/interrupt", s.handleAgentInterrupt)
 
 	// Frontend static files with SPA fallback for client-side routing.
 	if s.config.Frontend != nil {

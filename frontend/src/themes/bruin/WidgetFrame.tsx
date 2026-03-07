@@ -45,7 +45,7 @@ export function BruinWidgetFrame({ widget, data, isLoading }: WidgetFrameProps) 
 
   return (
     <div className={`group ${containerClass[widget.type] ?? containerClass.text}`}>
-      <div className={`flex items-center text-[11px] font-medium uppercase tracking-wider text-[var(--dac-text-muted)] mb-1.5 ${isTable ? "px-4" : ""}`}>
+      <div className={`flex items-center text-[11px] font-medium uppercase tracking-wider text-[var(--dac-text-muted)] ${widget.description ? "mb-0.5" : "mb-1.5"} ${isTable ? "px-4" : ""}`}>
         <span>{widget.name}</span>
         {data?.query && (
           <span className="ml-auto">
@@ -53,6 +53,11 @@ export function BruinWidgetFrame({ widget, data, isLoading }: WidgetFrameProps) 
           </span>
         )}
       </div>
+      {widget.description && (
+        <div className={`text-[11px] leading-snug text-[var(--dac-text-muted)] opacity-70 mb-1.5 ${isTable ? "px-4" : ""}`}>
+          {widget.description}
+        </div>
+      )}
 
       {data?.error && (
         <div className={`text-xs text-[var(--dac-error)] font-mono mt-1 ${isTable ? "px-4" : ""}`}>{data.error}</div>

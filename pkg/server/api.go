@@ -255,6 +255,114 @@ func executeWidgetQuery(ctx context.Context, backend query.Backend, j widgetJob)
 	return wr
 }
 
+// handleStreamQuery is the streaming variant of handleBatchQuery.
+// It writes each widget result as a newline-delimited JSON line
+// as soon as the query completes, so the frontend can render
+// widgets incrementally.
+func (s *Server) handleStreamQuery(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported")
+		return
+	}
+
+	name := r.PathValue("name")
+
+	var req batchQueryRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+	}
+
+	dashboards, err := s.loader.Load()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var d *dashboard.Dashboard
+	for _, dash := range dashboards {
+		if dash.Name == name {
+			d = dash
+			break
+		}
+	}
+	if d == nil {
+		writeError(w, http.StatusNotFound, "dashboard not found: "+name)
+		return
+	}
+
+	filters := d.DefaultFilters()
+	for k, v := range req.Filters {
+		filters[k] = v
+	}
+
+	var jobs []widgetJob
+	for i, row := range d.Rows {
+		for j, widget := range row.Widgets {
+			if widget.Type == dashboard.WidgetTypeText || widget.Type == dashboard.WidgetTypeDivider || widget.Type == dashboard.WidgetTypeImage {
+				continue
+			}
+			sql, conn, err := widget.ResolvedQuery(d)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if len(filters) > 0 {
+				sql, err = tmpl.Render(sql, filters)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "template error: "+err.Error())
+					return
+				}
+			}
+			jobs = append(jobs, widgetJob{id: widgetID(i, j), sql: sql, connection: conn})
+		}
+	}
+
+	// Set up streaming response.
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	// Results channel — each goroutine sends its result here.
+	type streamResult struct {
+		ID   string             `json:"id"`
+		Data *widgetQueryResult `json:"data"`
+	}
+	ch := make(chan streamResult, len(jobs))
+
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		wg.Add(1)
+		go func(j widgetJob) {
+			defer wg.Done()
+			sem <- struct{}{}
+			wr := executeWidgetQuery(r.Context(), s.backend, j)
+			<-sem
+			ch <- streamResult{ID: j.id, Data: wr}
+		}(j)
+	}
+
+	// Close channel when all goroutines complete.
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	enc := json.NewEncoder(w)
+	for result := range ch {
+		if err := enc.Encode(result); err != nil {
+			return // client disconnected
+		}
+		flusher.Flush()
+	}
+}
+
 func widgetID(rowIdx, widgetIdx int) string {
 	return fmt.Sprintf("r%d-w%d", rowIdx, widgetIdx)
 }

@@ -46,6 +46,75 @@ export async function fetchDashboardData(
   return data.widgets;
 }
 
+/**
+ * Stream widget data via NDJSON. Calls onWidget for each widget result
+ * as it arrives from the server. Returns an abort function.
+ */
+export function streamDashboardData(
+  name: string,
+  filters: Record<string, unknown> | undefined,
+  onWidget: (id: string, data: WidgetData) => void,
+  onDone: () => void,
+  onError: (err: Error) => void,
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(
+        `${BASE}/dashboards/${encodeURIComponent(name)}/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filters: filters ?? {} }),
+          signal: controller.signal,
+        },
+      );
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`API error ${res.status}: ${body}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete lines.
+        let newlineIdx;
+        while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+
+          if (!line) continue;
+
+          try {
+            const msg = JSON.parse(line) as { id: string; data: WidgetData };
+            onWidget(msg.id, msg.data);
+          } catch {
+            // Skip malformed lines.
+          }
+        }
+      }
+
+      onDone();
+    } catch (err) {
+      if ((err as DOMException)?.name === "AbortError") return;
+      onError(err instanceof Error ? err : new Error(String(err)));
+    }
+  })();
+
+  return () => controller.abort();
+}
+
 export async function listThemes(): Promise<string[]> {
   const data = await fetchJSON<{ themes: string[] }>(`${BASE}/themes`);
   return data.themes;
@@ -149,4 +218,34 @@ export async function testConnection(
       headers: adminHeaders(),
     },
   );
+}
+
+// --- Agent API ---
+
+export async function createAgentSession(dashboard: string): Promise<{ session_id: string }> {
+  return fetchJSON<{ session_id: string }>(`${BASE}/agent/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dashboard }),
+  });
+}
+
+export async function sendAgentMessage(sessionId: string, message: string): Promise<void> {
+  await fetchJSON(`${BASE}/agent/sessions/${encodeURIComponent(sessionId)}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+}
+
+export async function interruptAgent(sessionId: string, turnId?: string): Promise<void> {
+  await fetchJSON(`${BASE}/agent/sessions/${encodeURIComponent(sessionId)}/interrupt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ turn_id: turnId }),
+  });
+}
+
+export function agentEventsURL(sessionId: string): string {
+  return `${BASE}/agent/sessions/${encodeURIComponent(sessionId)}/events`;
 }

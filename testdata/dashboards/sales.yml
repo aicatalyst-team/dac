@@ -44,7 +44,7 @@ rows:
             AND created_at <= '{{ filters.date_range.end }}'
         column: total
         format: number
-      - name: Avg Order Value
+      - name: Average Order Value
         type: metric
         col: 3
         sql: |
@@ -54,16 +54,15 @@ rows:
         column: avg_value
         prefix: "$"
         format: number
-      - name: Completion Rate
+      - name: P90 Order Value
         type: metric
         col: 3
         sql: |
-          SELECT ROUND(100.0 * SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) / COUNT(*), 1) as rate
-          FROM orders
+          SELECT ROUND(quantile_cont(amount, 0.9), 2) as p90_value FROM orders
           WHERE created_at >= '{{ filters.date_range.start }}'
             AND created_at <= '{{ filters.date_range.end }}'
-        column: rate
-        suffix: "%"
+        column: p90_value
+        prefix: "$"
         format: number
 
   # Revenue trend + region breakdown
@@ -153,7 +152,7 @@ rows:
             label: Total Spent
             format: currency
           - name: avg_order
-            label: Avg Order
+            label: Average Order
             format: currency
       - name: Revenue by Region & Month
         type: table

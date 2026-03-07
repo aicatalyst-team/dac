@@ -59,6 +59,7 @@ export interface DashboardListLayoutProps {
 export interface DashboardLayoutProps {
   dashboard: Dashboard;
   filterBar: ReactNode;
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 

@@ -44,6 +44,7 @@ export interface Row {
 
 export interface Widget {
   name: string;
+  description?: string;
   type: "metric" | "chart" | "table" | "text" | "divider" | "image";
   col?: number;
 
