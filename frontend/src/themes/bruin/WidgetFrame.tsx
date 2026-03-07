@@ -1,8 +1,9 @@
 import type { WidgetFrameProps } from "../../types/template";
 import { useTemplate } from "../TemplateProvider";
+import { QueryInfo } from "../../components/widgets/QueryInfo";
 
 const containerClass: Record<string, string> = {
-  metric: "py-3 px-4 h-full border-l border-[var(--dac-border)]",
+  metric: "py-3 px-4 h-full dac-metric-border",
   chart: "py-3 px-4 h-full border border-[var(--dac-border)] rounded",
   table: "py-3 h-full border border-[var(--dac-border)] rounded overflow-hidden",
   text: "py-3 h-full",
@@ -43,9 +44,14 @@ export function BruinWidgetFrame({ widget, data, isLoading }: WidgetFrameProps) 
   const isTable = widget.type === "table";
 
   return (
-    <div className={containerClass[widget.type] ?? containerClass.text}>
-      <div className={`text-[11px] font-medium uppercase tracking-wider text-[var(--dac-text-muted)] mb-1.5 ${isTable ? "px-4" : ""}`}>
-        {widget.name}
+    <div className={`group ${containerClass[widget.type] ?? containerClass.text}`}>
+      <div className={`flex items-center text-[11px] font-medium uppercase tracking-wider text-[var(--dac-text-muted)] mb-1.5 ${isTable ? "px-4" : ""}`}>
+        <span>{widget.name}</span>
+        {data?.query && (
+          <span className="ml-auto">
+            <QueryInfo query={data.query} />
+          </span>
+        )}
       </div>
 
       {data?.error && (

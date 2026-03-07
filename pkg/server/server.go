@@ -95,13 +95,15 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/v1/config", s.handleConfig)
 	s.mux.HandleFunc("GET /api/v1/events", s.handleSSE)
 
-	// Admin routes.
-	s.mux.HandleFunc("POST /api/v1/admin/login", s.handleAdminLogin)
-	s.mux.HandleFunc("GET /api/v1/admin/connections", s.requireAdmin(s.handleAdminListConnections))
-	s.mux.HandleFunc("POST /api/v1/admin/connections", s.requireAdmin(s.handleAdminCreateConnection))
-	s.mux.HandleFunc("PUT /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminUpdateConnection))
-	s.mux.HandleFunc("DELETE /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminDeleteConnection))
-	s.mux.HandleFunc("POST /api/v1/admin/connections/{type}/{name}/test", s.requireAdmin(s.handleAdminTestConnection))
+	// Admin routes — only registered when a password is configured.
+	if s.config.AdminPassword != "" {
+		s.mux.HandleFunc("POST /api/v1/admin/login", s.handleAdminLogin)
+		s.mux.HandleFunc("GET /api/v1/admin/connections", s.requireAdmin(s.handleAdminListConnections))
+		s.mux.HandleFunc("POST /api/v1/admin/connections", s.requireAdmin(s.handleAdminCreateConnection))
+		s.mux.HandleFunc("PUT /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminUpdateConnection))
+		s.mux.HandleFunc("DELETE /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminDeleteConnection))
+		s.mux.HandleFunc("POST /api/v1/admin/connections/{type}/{name}/test", s.requireAdmin(s.handleAdminTestConnection))
+	}
 
 	// Frontend static files with SPA fallback for client-side routing.
 	if s.config.Frontend != nil {

@@ -1,6 +1,10 @@
 export interface DashboardSummary {
   name: string;
   description?: string;
+  connection?: string;
+  widget_count?: number;
+  filter_count?: number;
+  row_count?: number;
 }
 
 export interface Dashboard {
@@ -90,6 +94,7 @@ export interface TableColumn {
 export interface WidgetData {
   columns: { name: string; type?: string }[];
   rows: unknown[][];
+  query?: string;
   error?: string;
 }
 

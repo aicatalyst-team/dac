@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import type { Dashboard, Filter, Widget, WidgetData } from "./dashboard";
+import type { Dashboard, DashboardSummary, Filter, Widget, WidgetData } from "./dashboard";
 
 /**
  * Props passed to individual widget renderers (Metric, Chart, Table).
@@ -49,7 +49,8 @@ export interface WidgetContainerProps {
  * Props for the dashboard list page.
  */
 export interface DashboardListLayoutProps {
-  dashboards: { name: string; description?: string }[];
+  dashboards: DashboardSummary[];
+  adminEnabled?: boolean;
 }
 
 /**

@@ -50,26 +50,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Responsive grid for dashboard rows */
-.dac-row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
-.dac-widget-col {
-  grid-column: span 1;
-}
-
-@media (min-width: 640px) {
-  .dac-row {
-    grid-template-columns: repeat(12, 1fr);
-  }
-  .dac-widget-col {
-    grid-column: span var(--dac-col, 12);
-  }
-}
-
 /* Entrance animation */
 @keyframes fadeInUp {
   from {
@@ -119,6 +99,14 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--dac-text-muted);
+}
+
+/* Metric border: show left border except on the first widget in a row */
+.dac-metric-border {
+  border-left: 1px solid var(--dac-border);
+}
+:first-child > .dac-metric-border {
+  border-left: none;
 }
 
 /* Chart tooltip */

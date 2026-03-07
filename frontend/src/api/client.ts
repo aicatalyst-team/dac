@@ -15,6 +15,7 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 export interface ServerConfig {
   template: string;
   tokens?: Record<string, string>;
+  admin_enabled?: boolean;
 }
 
 export async function fetchConfig(): Promise<ServerConfig> {
