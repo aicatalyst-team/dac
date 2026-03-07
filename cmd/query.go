@@ -30,12 +30,7 @@ func queryCmd() *cli.Command {
 				Aliases: []string{"f"},
 				Usage:   "Path to a .sql file to execute",
 			},
-			&cli.StringFlag{
-				Name:    "dir",
-				Aliases: []string{"d"},
-				Usage:   "Dashboard definitions directory (for --dashboard/--widget)",
-				Value:   ".",
-			},
+			dirFlag,
 			&cli.StringFlag{
 				Name:  "dashboard",
 				Usage: "Dashboard name (to run a specific widget's query)",
@@ -107,50 +102,35 @@ func resolveWidgetQuery(dir, dashboardName, widgetName string) (string, string, 
 		return "", "", fmt.Errorf("loading dashboards: %w", err)
 	}
 
-	var d *dashboard.Dashboard
-	for _, dash := range dashboards {
-		if dash.Name == dashboardName {
-			d = dash
-			break
-		}
-	}
+	d := dashboard.FindByName(dashboards, dashboardName)
 	if d == nil {
 		return "", "", fmt.Errorf("dashboard %q not found", dashboardName)
 	}
 
 	for _, row := range d.Rows {
 		for _, w := range row.Widgets {
-			if w.Name == widgetName {
-				sql, conn, err := w.ResolvedQuery(d)
-				if err != nil {
-					return "", "", fmt.Errorf("resolving query: %w", err)
-				}
-
-				// Apply default filter values.
-				defaults := buildDefaultFilters(d)
-				if len(defaults) > 0 {
-					sql, err = tmpl.Render(sql, defaults)
-					if err != nil {
-						return "", "", fmt.Errorf("templating query: %w", err)
-					}
-				}
-
-				return sql, conn, nil
+			if w.Name != widgetName {
+				continue
 			}
+
+			sql, conn, err := w.ResolvedQuery(d)
+			if err != nil {
+				return "", "", fmt.Errorf("resolving query: %w", err)
+			}
+
+			defaults := d.DefaultFilters()
+			if len(defaults) > 0 {
+				sql, err = tmpl.Render(sql, defaults)
+				if err != nil {
+					return "", "", fmt.Errorf("templating query: %w", err)
+				}
+			}
+
+			return sql, conn, nil
 		}
 	}
 
 	return "", "", fmt.Errorf("widget %q not found in dashboard %q", widgetName, dashboardName)
-}
-
-func buildDefaultFilters(d *dashboard.Dashboard) map[string]any {
-	defaults := make(map[string]any)
-	for _, f := range d.Filters {
-		if f.Default != nil {
-			defaults[f.Name] = f.Default
-		}
-	}
-	return defaults
 }
 
 func printResult(result *query.QueryResult, format string) error {

@@ -3,10 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"text/tabwriter"
 	"os"
+	"text/tabwriter"
 
-	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/urfave/cli/v3"
 )
 
@@ -14,24 +13,14 @@ func lsCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "ls",
 		Usage: "List discovered dashboards",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "dir",
-				Aliases: []string{"d"},
-				Usage:   "Dashboard definitions directory",
-				Value:   ".",
-			},
-		},
+		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			dir := cmd.String("dir")
-
-			dashboards, err := dashboard.LoadDir(dir)
+			dashboards, err := loadDashboards(cmd.String("dir"))
 			if err != nil {
-				return fmt.Errorf("failed to load dashboards: %w", err)
+				return err
 			}
-
-			if len(dashboards) == 0 {
-				fmt.Println("No dashboard files found in", dir)
+			if dashboards == nil {
+				fmt.Println("No dashboard files found in", cmd.String("dir"))
 				return nil
 			}
 

@@ -30,6 +30,9 @@ export function BruinWidgetFrame({ widget, data, isLoading }: WidgetFrameProps) 
           {widget.type === "chart" && <ChartWidget widget={widget} data={data} />}
           {widget.type === "table" && <TableWidget widget={widget} data={data} />}
           {widget.type === "text" && <TextWidget widget={widget} />}
+          {!["metric", "chart", "table", "text"].includes(widget.type) && (
+            <div className="text-xs text-[var(--dac-text-muted)]">Unknown widget type: {widget.type}</div>
+          )}
         </>
       )}
     </div>

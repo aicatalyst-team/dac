@@ -118,7 +118,7 @@ func (s *Server) handleBatchQuery(w http.ResponseWriter, r *http.Request) {
 
 	for i, row := range d.Rows {
 		for j, widget := range row.Widgets {
-			if widget.Type == "text" {
+			if widget.Type == dashboard.WidgetTypeText {
 				continue
 			}
 			sql, conn, err := widget.ResolvedQuery(d)

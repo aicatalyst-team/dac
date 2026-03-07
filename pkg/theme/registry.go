@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Registry manages built-in and user-defined themes.
@@ -46,14 +44,9 @@ func (r *Registry) LoadUserThemes(dir string) error {
 		}
 
 		path := filepath.Join(dir, entry.Name())
-		data, err := os.ReadFile(path)
+		t, err := LoadFile(path)
 		if err != nil {
-			return fmt.Errorf("reading theme %s: %w", entry.Name(), err)
-		}
-
-		var t Theme
-		if err := yaml.Unmarshal(data, &t); err != nil {
-			return fmt.Errorf("parsing theme %s: %w", entry.Name(), err)
+			return fmt.Errorf("theme %s: %w", entry.Name(), err)
 		}
 
 		// Apply inheritance from base theme.

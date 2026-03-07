@@ -48,14 +48,14 @@ func Validate(d *Dashboard) error {
 
 			// Validate widget type.
 			switch w.Type {
-			case "metric":
+			case WidgetTypeMetric:
 				errs = append(errs, validateMetricWidget(prefix, &w)...)
-			case "chart":
+			case WidgetTypeChart:
 				errs = append(errs, validateChartWidget(prefix, &w)...)
-			case "table":
+			case WidgetTypeTable:
 				// Table widgets just need a query source.
 				errs = append(errs, validateQuerySource(prefix, &w, d)...)
-			case "text":
+			case WidgetTypeText:
 				if w.Content == "" {
 					errs = append(errs, fmt.Sprintf("%s: content is required for text widgets", prefix))
 				}

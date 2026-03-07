@@ -1,5 +1,13 @@
 package dashboard
 
+// Widget type constants.
+const (
+	WidgetTypeMetric = "metric"
+	WidgetTypeChart  = "chart"
+	WidgetTypeTable  = "table"
+	WidgetTypeText   = "text"
+)
+
 // Dashboard represents a complete dashboard definition loaded from YAML.
 type Dashboard struct {
 	Name        string           `yaml:"name" json:"name"`
@@ -87,6 +95,27 @@ type TableColumn struct {
 	Format string `yaml:"format,omitempty" json:"format,omitempty"`
 }
 
+// DefaultFilters returns a map of filter names to their default values.
+func (d *Dashboard) DefaultFilters() map[string]any {
+	defaults := make(map[string]any)
+	for _, f := range d.Filters {
+		if f.Default != nil {
+			defaults[f.Name] = f.Default
+		}
+	}
+	return defaults
+}
+
+// FindByName returns the dashboard with the given name from a slice, or nil.
+func FindByName(dashboards []*Dashboard, name string) *Dashboard {
+	for _, d := range dashboards {
+		if d.Name == name {
+			return d
+		}
+	}
+	return nil
+}
+
 // ResolvedQuery returns the SQL and connection for this widget, resolving named query references.
 func (w *Widget) ResolvedQuery(dashboard *Dashboard) (sql, connection string, err error) {
 	switch {
@@ -121,7 +150,7 @@ func (w *Widget) ResolvedQuery(dashboard *Dashboard) (sql, connection string, er
 		return w.SQL, conn, nil
 
 	default:
-		if w.Type == "text" {
+		if w.Type == WidgetTypeText {
 			return "", "", nil
 		}
 		return "", "", &NoQueryError{Widget: w.Name}

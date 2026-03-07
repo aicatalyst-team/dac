@@ -1,6 +1,5 @@
 import type { DashboardTemplate } from "../types/template";
-import { bruinTemplate } from "./bruin/index";
-import { bruinDarkTemplate } from "./bruin-dark/index";
+import { bruinTemplate, bruinDarkTemplate } from "./bruin/index";
 
 /** Built-in templates keyed by name. */
 const builtInTemplates: Record<string, DashboardTemplate> = {

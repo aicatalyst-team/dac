@@ -3,25 +3,34 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/bruin-data/dac/pkg/dashboard"
+	"github.com/bruin-data/dac/pkg/query"
 	tmpl "github.com/bruin-data/dac/pkg/template"
 	"github.com/urfave/cli/v3"
 )
+
+type checkJob struct {
+	widgetName string
+	sql        string
+	connection string
+}
+
+type checkResult struct {
+	widgetName string
+	rows       int
+	cols       int
+	elapsed    time.Duration
+	err        error
+}
 
 func checkCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "check",
 		Usage: "Validate dashboards and execute all queries to verify they work",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "dir",
-				Aliases: []string{"d"},
-				Usage:   "Dashboard definitions directory",
-				Value:   ".",
-			},
-		},
+		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			dir := cmd.String("dir")
 
@@ -32,24 +41,21 @@ func checkCmd() *cli.Command {
 
 			backend := newBackend(cmd, configFile)
 
-			dashboards, err := dashboard.LoadDir(dir)
+			dashboards, err := loadDashboards(dir)
 			if err != nil {
-				return fmt.Errorf("failed to load dashboards: %w", err)
+				return err
 			}
-
-			if len(dashboards) == 0 {
+			if dashboards == nil {
 				fmt.Println("No dashboard files found in", dir)
 				return nil
 			}
 
 			totalErrors := 0
 			totalWidgets := 0
-			totalDashboards := len(dashboards)
 
 			for _, d := range dashboards {
 				fmt.Printf("\n%s\n", d.Name)
 
-				// YAML validation first.
 				if err := dashboard.Validate(d); err != nil {
 					fmt.Printf("  ✗ YAML validation failed\n")
 					if ve, ok := err.(*dashboard.ValidationError); ok {
@@ -63,14 +69,18 @@ func checkCmd() *cli.Command {
 					continue
 				}
 
-				defaults := buildDefaultFilters(d)
+				defaults := d.DefaultFilters()
 
-				for rowIdx, row := range d.Rows {
-					for widgetIdx, w := range row.Widgets {
+				// Collect jobs, tracking text widgets separately (no query needed).
+				var textWidgets []string
+				connGroups := make(map[string][]checkJob)
+
+				for _, row := range d.Rows {
+					for _, w := range row.Widgets {
 						totalWidgets++
 
-						if w.Type == "text" {
-							fmt.Printf("  ✓ %-30s  text\n", w.Name)
+						if w.Type == dashboard.WidgetTypeText {
+							textWidgets = append(textWidgets, w.Name)
 							continue
 						}
 
@@ -81,7 +91,6 @@ func checkCmd() *cli.Command {
 							continue
 						}
 
-						// Apply default filter values.
 						if len(defaults) > 0 {
 							sql, err = tmpl.Render(sql, defaults)
 							if err != nil {
@@ -91,25 +100,28 @@ func checkCmd() *cli.Command {
 							}
 						}
 
-						_ = rowIdx
-						_ = widgetIdx
+						connGroups[conn] = append(connGroups[conn], checkJob{
+							widgetName: w.Name,
+							sql:        sql,
+							connection: conn,
+						})
+					}
+				}
 
-						start := time.Now()
-						result, err := backend.Execute(ctx, conn, sql)
-						elapsed := time.Since(start)
+				// Print text widgets.
+				for _, name := range textWidgets {
+					fmt.Printf("  ✓ %-30s  text\n", name)
+				}
 
-						if err != nil {
-							fmt.Printf("  ✗ %-30s  %s\n", w.Name, err)
-							totalErrors++
-							continue
-						}
-
+				// Execute query groups in parallel (same connection sequential).
+				results := executeCheckJobs(ctx, backend, connGroups)
+				for _, r := range results {
+					if r.err != nil {
+						fmt.Printf("  ✗ %-30s  %s\n", r.widgetName, r.err)
+						totalErrors++
+					} else {
 						fmt.Printf("  ✓ %-30s  %d rows, %d cols  (%dms)\n",
-							w.Name,
-							len(result.Rows),
-							len(result.Columns),
-							elapsed.Milliseconds(),
-						)
+							r.widgetName, r.rows, r.cols, r.elapsed.Milliseconds())
 					}
 				}
 			}
@@ -117,12 +129,45 @@ func checkCmd() *cli.Command {
 			fmt.Println()
 			if totalErrors > 0 {
 				fmt.Printf("%d error(s) across %d dashboard(s), %d widget(s) checked\n",
-					totalErrors, totalDashboards, totalWidgets)
+					totalErrors, len(dashboards), totalWidgets)
 				return fmt.Errorf("check failed with %d error(s)", totalErrors)
 			}
 
-			fmt.Printf("%d dashboard(s), %d widget(s) — all passing\n", totalDashboards, totalWidgets)
+			fmt.Printf("%d dashboard(s), %d widget(s) — all passing\n", len(dashboards), totalWidgets)
 			return nil
 		},
 	}
+}
+
+// executeCheckJobs runs query jobs grouped by connection. Same connection runs
+// sequentially (avoids file lock contention), different connections in parallel.
+func executeCheckJobs(ctx context.Context, backend query.Backend, connGroups map[string][]checkJob) []checkResult {
+	var allResults []checkResult
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for _, jobs := range connGroups {
+		wg.Add(1)
+		go func(jobs []checkJob) {
+			defer wg.Done()
+			for _, j := range jobs {
+				start := time.Now()
+				qr, err := backend.Execute(ctx, j.connection, j.sql)
+				elapsed := time.Since(start)
+
+				r := checkResult{widgetName: j.widgetName, elapsed: elapsed, err: err}
+				if err == nil {
+					r.rows = len(qr.Rows)
+					r.cols = len(qr.Columns)
+				}
+
+				mu.Lock()
+				allResults = append(allResults, r)
+				mu.Unlock()
+			}
+		}(jobs)
+	}
+
+	wg.Wait()
+	return allResults
 }

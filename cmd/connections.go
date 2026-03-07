@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"text/tabwriter"
 
 	"github.com/urfave/cli/v3"
@@ -13,14 +14,7 @@ func connectionsCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "connections",
 		Usage: "Test database connections from .bruin.yml",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "dir",
-				Aliases: []string{"d"},
-				Usage:   "Dashboard definitions directory (for config discovery)",
-				Value:   ".",
-			},
-		},
+		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			dir := cmd.String("dir")
 
@@ -37,19 +31,47 @@ func connectionsCmd() *cli.Command {
 
 			backend := newBackend(cmd, configFile)
 
+			type connResult struct {
+				name     string
+				connType string
+				status   string
+				isError  bool
+			}
+
+			var results []connResult
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+
+			for connType, conns := range env.Connections {
+				for _, conn := range conns {
+					wg.Add(1)
+					go func(name, ct string) {
+						defer wg.Done()
+						_, err := backend.Execute(ctx, name, "SELECT 1")
+						r := connResult{name: name, connType: ct}
+						if err != nil {
+							r.status = "✗ " + summarizeError(err)
+							r.isError = true
+						} else {
+							r.status = "✓ connected"
+						}
+						mu.Lock()
+						results = append(results, r)
+						mu.Unlock()
+					}(conn.Name, connType)
+				}
+			}
+
+			wg.Wait()
+
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 			fmt.Fprintln(w, "NAME\tTYPE\tSTATUS")
 
 			hasErrors := false
-			for connType, conns := range env.Connections {
-				for _, conn := range conns {
-					_, err := backend.Execute(ctx, conn.Name, "SELECT 1")
-					status := "✓ connected"
-					if err != nil {
-						status = "✗ " + summarizeError(err)
-						hasErrors = true
-					}
-					fmt.Fprintf(w, "%s\t%s\t%s\n", conn.Name, connType, status)
+			for _, r := range results {
+				fmt.Fprintf(w, "%s\t%s\t%s\n", r.name, r.connType, r.status)
+				if r.isError {
+					hasErrors = true
 				}
 			}
 
@@ -66,7 +88,6 @@ func connectionsCmd() *cli.Command {
 // summarizeError extracts a short message from a bruin query error.
 func summarizeError(err error) string {
 	s := err.Error()
-	// Truncate long error messages.
 	if len(s) > 120 {
 		return s[:117] + "..."
 	}
