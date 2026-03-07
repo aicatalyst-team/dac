@@ -1,10 +1,33 @@
 package theme
 
+import (
+	"fmt"
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
 // Theme represents a dashboard theme with design tokens.
 type Theme struct {
 	Name    string            `yaml:"name" json:"name"`
 	Extends string            `yaml:"extends,omitempty" json:"extends,omitempty"`
 	Tokens  map[string]string `yaml:"tokens" json:"tokens"`
+}
+
+// LoadFile reads a single theme YAML file.
+func LoadFile(path string) (Theme, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Theme{}, fmt.Errorf("reading theme file %s: %w", path, err)
+	}
+	var t Theme
+	if err := yaml.Unmarshal(data, &t); err != nil {
+		return Theme{}, fmt.Errorf("parsing theme file %s: %w", path, err)
+	}
+	if t.Name == "" {
+		return Theme{}, fmt.Errorf("theme file %s: missing 'name' field", path)
+	}
+	return t, nil
 }
 
 // BruinLight is the default "bruin" theme.

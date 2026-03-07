@@ -1,12 +1,7 @@
-import type { Filter } from "../types/dashboard";
+import type { FilterBarProps } from "../../types/template";
+import type { Filter } from "../../types/dashboard";
 
-interface Props {
-  filters: Filter[];
-  values: Record<string, unknown>;
-  onChange: (name: string, value: unknown) => void;
-}
-
-export function FilterBar({ filters, values, onChange }: Props) {
+export function BruinFilterBar({ filters, values, onChange }: FilterBarProps) {
   if (!filters.length) return null;
 
   return (

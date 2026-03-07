@@ -3,7 +3,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import type { Widget, WidgetData } from "../../types/dashboard";
-import { useTheme } from "../../themes/ThemeProvider";
+import { useTokens } from "../../themes/TemplateProvider";
 
 interface Props {
   widget: Widget;
@@ -82,16 +82,16 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export function ChartWidget({ widget, data }: Props) {
-  const theme = useTheme();
+  const tokens = useTokens();
 
   if (!data?.rows?.length) {
     return <div className="text-[var(--dac-text-muted)] text-xs py-6 text-center">No data</div>;
   }
 
   const chartData = toChartData(data);
-  const colors = CHART_COLORS.map((key) => theme.tokens[key] || "#888");
-  const gridColor = theme.tokens["border"];
-  const axisColor = theme.tokens["text-muted"];
+  const colors = CHART_COLORS.map((key) => tokens[key] || "#888");
+  const gridColor = tokens["border"];
+  const axisColor = tokens["text-muted"];
 
   const commonAxisProps = {
     tick: { ...AXIS_STYLE, fill: axisColor },

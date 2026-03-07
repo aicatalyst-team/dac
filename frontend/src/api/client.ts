@@ -12,6 +12,15 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export interface ServerConfig {
+  template: string;
+  tokens?: Record<string, string>;
+}
+
+export async function fetchConfig(): Promise<ServerConfig> {
+  return fetchJSON<ServerConfig>(`${BASE}/config`);
+}
+
 export async function listDashboards(): Promise<DashboardSummary[]> {
   const data = await fetchJSON<{ dashboards: DashboardSummary[] }>(`${BASE}/dashboards`);
   return data.dashboards;

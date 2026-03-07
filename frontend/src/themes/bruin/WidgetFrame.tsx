@@ -1,14 +1,5 @@
-import type { Widget as WidgetType, WidgetData } from "../types/dashboard";
-import { MetricWidget } from "./widgets/MetricWidget";
-import { ChartWidget } from "./widgets/ChartWidget";
-import { TableWidget } from "./widgets/TableWidget";
-import { TextWidget } from "./widgets/TextWidget";
-
-interface WidgetProps {
-  widget: WidgetType;
-  data?: WidgetData;
-  isLoading: boolean;
-}
+import type { WidgetFrameProps } from "../../types/template";
+import { useTemplate } from "../TemplateProvider";
 
 const containerClass: Record<string, string> = {
   metric: "py-3 px-4 h-full border-l border-[var(--dac-border)]",
@@ -17,7 +8,8 @@ const containerClass: Record<string, string> = {
   text: "py-3 h-full",
 };
 
-export function Widget({ widget, data, isLoading }: WidgetProps) {
+export function BruinWidgetFrame({ widget, data, isLoading }: WidgetFrameProps) {
+  const { MetricWidget, ChartWidget, TableWidget, TextWidget } = useTemplate();
   const isTable = widget.type === "table";
 
   return (
@@ -33,7 +25,12 @@ export function Widget({ widget, data, isLoading }: WidgetProps) {
       {isLoading && !data && <LoadingSkeleton type={widget.type} />}
 
       {!isLoading && !data?.error && (
-        <WidgetContent widget={widget} data={data} />
+        <>
+          {widget.type === "metric" && <MetricWidget widget={widget} data={data} />}
+          {widget.type === "chart" && <ChartWidget widget={widget} data={data} />}
+          {widget.type === "table" && <TableWidget widget={widget} data={data} />}
+          {widget.type === "text" && <TextWidget widget={widget} />}
+        </>
       )}
     </div>
   );
@@ -57,19 +54,4 @@ function LoadingSkeleton({ type }: { type: string }) {
     );
   }
   return <div className="skeleton h-8 w-full" />;
-}
-
-function WidgetContent({ widget, data }: { widget: WidgetType; data?: WidgetData }) {
-  switch (widget.type) {
-    case "metric":
-      return <MetricWidget widget={widget} data={data} />;
-    case "chart":
-      return <ChartWidget widget={widget} data={data} />;
-    case "table":
-      return <TableWidget widget={widget} data={data} />;
-    case "text":
-      return <TextWidget widget={widget} />;
-    default:
-      return <div className="text-[var(--dac-text-muted)] text-xs">Unknown widget type</div>;
-  }
 }

@@ -26,9 +26,9 @@ func serveCmd() *cli.Command {
 				Value:   ".",
 			},
 			&cli.StringFlag{
-				Name:    "theme",
+				Name:    "template",
 				Aliases: []string{"t"},
-				Usage:   "Default theme name",
+				Usage:   "Template name (bruin, bruin-dark) or path to a theme YAML file",
 				Value:   "bruin",
 			},
 			&cli.StringFlag{
@@ -61,7 +61,7 @@ func serveCmd() *cli.Command {
 				Host:         cmd.String("host"),
 				Port:         int(cmd.Int("port")),
 				DashboardDir: dir,
-				ThemeName:    cmd.String("theme"),
+				TemplateName: cmd.String("template"),
 				ConfigFile:   configFile,
 				Environment:  cmd.Root().String("environment"),
 				Frontend:     frontendFS,

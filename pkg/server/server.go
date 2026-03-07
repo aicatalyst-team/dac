@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/bruin-data/dac/pkg/query"
@@ -16,7 +19,7 @@ type Config struct {
 	Host         string
 	Port         int
 	DashboardDir string
-	ThemeName    string
+	TemplateName string
 	ConfigFile   string
 	Environment  string
 	Frontend     fs.FS // embedded frontend files, nil for dev mode
@@ -50,6 +53,24 @@ func New(cfg Config) (*Server, error) {
 
 	themes := theme.NewRegistry()
 
+	// If --template points to a .yml/.yaml file, load it as a user theme.
+	templateName := cfg.TemplateName
+	if strings.HasSuffix(templateName, ".yml") || strings.HasSuffix(templateName, ".yaml") {
+		t, err := theme.LoadFile(templateName)
+		if err != nil {
+			return nil, fmt.Errorf("loading template file: %w", err)
+		}
+		themes.Add(t)
+		templateName = t.Name
+		cfg.TemplateName = templateName
+	}
+
+	// Also load user themes from themes/ dir next to dashboards.
+	themesDir := filepath.Join(cfg.DashboardDir, "themes")
+	if err := themes.LoadUserThemes(themesDir); err != nil {
+		log.Printf("Warning: could not load user themes: %v", err)
+	}
+
 	s := &Server{
 		config:  cfg,
 		backend: cachedBackend,
@@ -70,6 +91,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("POST /api/v1/query", s.handleSingleQuery)
 	s.mux.HandleFunc("GET /api/v1/themes", s.handleListThemes)
 	s.mux.HandleFunc("GET /api/v1/themes/{name}", s.handleGetTheme)
+	s.mux.HandleFunc("GET /api/v1/config", s.handleConfig)
 	s.mux.HandleFunc("GET /api/v1/events", s.handleSSE)
 
 	// Frontend static files with SPA fallback for client-side routing.
@@ -105,6 +127,7 @@ func spaHandler(fsys fs.FS) http.Handler {
 }
 
 // Start begins listening and serving.
+// It tries the configured port first, then increments until it finds an available one.
 func (s *Server) Start() error {
 	// Start file watcher.
 	watcher, err := NewWatcher(s.config.DashboardDir)
@@ -115,7 +138,19 @@ func (s *Server) Start() error {
 		go s.watcher.Run()
 	}
 
-	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
-	log.Printf("dac server listening on http://%s", addr)
-	return http.ListenAndServe(addr, s.mux)
+	port := s.config.Port
+	maxAttempts := 50
+	for i := 0; i < maxAttempts; i++ {
+		addr := fmt.Sprintf("%s:%d", s.config.Host, port)
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Printf("Port %d in use, trying %d...", port, port+1)
+			port++
+			continue
+		}
+		log.Printf("dac server listening on http://%s", addr)
+		return http.Serve(ln, s.mux)
+	}
+
+	return fmt.Errorf("no available port found in range %d-%d", s.config.Port, s.config.Port+maxAttempts-1)
 }

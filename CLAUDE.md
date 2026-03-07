@@ -39,3 +39,7 @@ Bruin is an engineering-grade data tool that presents information with authority
 - Recharts for data visualization
 - Custom theme system with CSS variables (`--dac-*`)
 - Go backend with embedded frontend (single binary)
+
+## Skills
+
+- `/create-dashboard [description]` — Full reference for creating dac dashboard YAML files. Covers widget types (metric, chart, table, text), filters, query templating (Jinja), grid layout, and CLI usage.

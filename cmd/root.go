@@ -31,8 +31,12 @@ func NewApp() *cli.Command {
 			},
 		},
 		Commands: []*cli.Command{
-			validateCmd(),
 			serveCmd(),
+			validateCmd(),
+			checkCmd(),
+			queryCmd(),
+			lsCmd(),
+			connectionsCmd(),
 		},
 	}
 }

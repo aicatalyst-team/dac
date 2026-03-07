@@ -78,6 +78,11 @@ func (r *Registry) LoadUserThemes(dir string) error {
 	return nil
 }
 
+// Add registers a theme in the registry.
+func (r *Registry) Add(t Theme) {
+	r.themes[t.Name] = t
+}
+
 // Get returns a theme by name.
 func (r *Registry) Get(name string) (Theme, bool) {
 	t, ok := r.themes[name]

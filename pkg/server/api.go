@@ -189,6 +189,19 @@ func (s *Server) handleSingleQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	templateName := s.config.TemplateName
+	resp := map[string]any{"template": templateName}
+
+	// If the template is a user-defined theme (not a built-in), include its tokens
+	// so the frontend can apply them even without having the template's components.
+	if t, ok := s.themes.Get(templateName); ok {
+		resp["tokens"] = t.Tokens
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) handleListThemes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"themes": s.themes.List()})
 }
