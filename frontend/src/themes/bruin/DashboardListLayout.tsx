@@ -51,6 +51,14 @@ export function BruinDashboardListLayout({ dashboards }: DashboardListLayoutProp
           </Link>
         ))}
       </div>
+      <div className="mt-8 text-center">
+        <Link
+          to="/admin"
+          className="text-[11px] no-underline text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)]"
+        >
+          Admin
+        </Link>
+      </div>
     </div>
   );
 }

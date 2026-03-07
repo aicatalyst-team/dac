@@ -59,10 +59,16 @@ func Validate(d *Dashboard) error {
 				if w.Content == "" {
 					errs = append(errs, fmt.Sprintf("%s: content is required for text widgets", prefix))
 				}
+			case WidgetTypeDivider:
+				// No required fields.
+			case WidgetTypeImage:
+				if w.Src == "" {
+					errs = append(errs, fmt.Sprintf("%s: src is required for image widgets", prefix))
+				}
 			case "":
 				// Already reported above.
 			default:
-				errs = append(errs, fmt.Sprintf("%s: unknown widget type %q (expected metric, chart, table, or text)", prefix, w.Type))
+				errs = append(errs, fmt.Sprintf("%s: unknown widget type %q (expected metric, chart, table, text, divider, or image)", prefix, w.Type))
 			}
 
 			if w.Col < 0 || w.Col > 12 {
@@ -120,23 +126,89 @@ func validateMetricWidget(prefix string, w *Widget) []string {
 	return errs
 }
 
+var validChartTypes = map[string]bool{
+	"line": true, "bar": true, "area": true, "pie": true,
+	"scatter": true, "bubble": true, "combo": true, "histogram": true,
+	"boxplot": true, "funnel": true, "sankey": true, "heatmap": true,
+	"calendar": true, "sparkline": true, "waterfall": true, "xmr": true,
+	"dumbbell": true,
+}
+
 func validateChartWidget(prefix string, w *Widget) []string {
 	var errs []string
-	validCharts := map[string]bool{"line": true, "bar": true, "area": true, "pie": true}
 	if w.Chart == "" {
-		errs = append(errs, fmt.Sprintf("%s: chart type is required (line, bar, area, pie)", prefix))
-	} else if !validCharts[w.Chart] {
+		errs = append(errs, fmt.Sprintf("%s: chart type is required", prefix))
+		return errs
+	}
+	if !validChartTypes[w.Chart] {
 		errs = append(errs, fmt.Sprintf("%s: unknown chart type %q", prefix, w.Chart))
+		return errs
 	}
 
-	if w.Chart == "pie" {
+	switch w.Chart {
+	case "pie", "funnel":
+		// label + value columns
 		if w.Label == "" {
-			errs = append(errs, fmt.Sprintf("%s: label is required for pie charts", prefix))
+			errs = append(errs, fmt.Sprintf("%s: label is required for %s charts", prefix, w.Chart))
 		}
 		if w.Value == "" {
-			errs = append(errs, fmt.Sprintf("%s: value is required for pie charts", prefix))
+			errs = append(errs, fmt.Sprintf("%s: value is required for %s charts", prefix, w.Chart))
 		}
-	} else if w.Chart != "" {
+
+	case "sankey":
+		// source + target + value columns
+		if w.Source == "" {
+			errs = append(errs, fmt.Sprintf("%s: source is required for sankey charts", prefix))
+		}
+		if w.Target == "" {
+			errs = append(errs, fmt.Sprintf("%s: target is required for sankey charts", prefix))
+		}
+		if w.Value == "" {
+			errs = append(errs, fmt.Sprintf("%s: value is required for sankey charts", prefix))
+		}
+
+	case "heatmap":
+		// x + y + value
+		if w.X == "" {
+			errs = append(errs, fmt.Sprintf("%s: x is required for heatmap charts", prefix))
+		}
+		if len(w.Y) == 0 {
+			errs = append(errs, fmt.Sprintf("%s: y is required for heatmap charts", prefix))
+		}
+		if w.Value == "" {
+			errs = append(errs, fmt.Sprintf("%s: value is required for heatmap charts", prefix))
+		}
+
+	case "calendar":
+		// x (date) + value
+		if w.X == "" {
+			errs = append(errs, fmt.Sprintf("%s: x (date column) is required for calendar charts", prefix))
+		}
+		if w.Value == "" {
+			errs = append(errs, fmt.Sprintf("%s: value is required for calendar charts", prefix))
+		}
+
+	case "histogram":
+		// x (column to bin)
+		if w.X == "" {
+			errs = append(errs, fmt.Sprintf("%s: x is required for histogram charts", prefix))
+		}
+
+	case "bubble":
+		// x + y + size
+		if w.X == "" {
+			errs = append(errs, fmt.Sprintf("%s: x is required for bubble charts", prefix))
+		}
+		if len(w.Y) == 0 {
+			errs = append(errs, fmt.Sprintf("%s: y is required for bubble charts", prefix))
+		}
+		if w.Size == "" {
+			errs = append(errs, fmt.Sprintf("%s: size is required for bubble charts", prefix))
+		}
+
+	default:
+		// line, bar, area, scatter, combo, sparkline, waterfall, xmr, dumbbell, boxplot
+		// all need x + y
 		if w.X == "" {
 			errs = append(errs, fmt.Sprintf("%s: x is required for %s charts", prefix, w.Chart))
 		}
@@ -144,5 +216,6 @@ func validateChartWidget(prefix string, w *Widget) []string {
 			errs = append(errs, fmt.Sprintf("%s: y is required for %s charts", prefix, w.Chart))
 		}
 	}
+
 	return errs
 }

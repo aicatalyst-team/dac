@@ -1,0 +1,203 @@
+name: Chart Showcase
+description: Demonstrates all chart types using sales & orders data
+connection: local_duckdb
+
+rows:
+  # Sparklines row
+  - widgets:
+      - name: Revenue Trend
+        type: chart
+        chart: sparkline
+        col: 4
+        sql: |
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            SUM(amount) AS revenue
+          FROM sales
+          GROUP BY 1 ORDER BY 1
+        x: month
+        y: [revenue]
+      - name: Order Volume
+        type: chart
+        chart: sparkline
+        col: 4
+        sql: |
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            COUNT(*) AS orders
+          FROM orders
+          GROUP BY 1 ORDER BY 1
+        x: month
+        y: [orders]
+      - name: Avg Order Size
+        type: chart
+        chart: sparkline
+        col: 4
+        sql: |
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            ROUND(AVG(amount), 2) AS avg_amount
+          FROM orders
+          GROUP BY 1 ORDER BY 1
+        x: month
+        y: [avg_amount]
+
+  # Scatter + Histogram
+  - widgets:
+      - name: Order Amount Distribution
+        type: chart
+        chart: scatter
+        col: 6
+        sql: |
+          SELECT
+            STRFTIME(created_at, '%Y-%m-%d') AS date,
+            amount
+          FROM orders
+          ORDER BY created_at
+        x: date
+        y: [amount]
+      - name: Order Size Histogram
+        type: chart
+        chart: histogram
+        col: 6
+        bins: 15
+        sql: |
+          SELECT amount FROM orders
+        x: amount
+
+  # Combo + Waterfall
+  - widgets:
+      - name: Revenue vs Orders (Combo)
+        type: chart
+        chart: combo
+        col: 6
+        lines: [orders]
+        sql: |
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            SUM(amount)::INTEGER AS revenue,
+            COUNT(*) AS orders
+          FROM sales
+          GROUP BY 1 ORDER BY 1
+        x: month
+        y: [revenue, orders]
+      - name: Monthly Revenue Changes
+        type: chart
+        chart: waterfall
+        col: 6
+        sql: |
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            SUM(amount)::INTEGER AS revenue
+          FROM sales
+          GROUP BY 1 ORDER BY 1
+        x: month
+        y: [revenue]
+
+  # Funnel + Sankey
+  - widgets:
+      - name: Order Status Funnel
+        type: chart
+        chart: funnel
+        col: 6
+        sql: |
+          SELECT
+            status,
+            COUNT(*) AS count
+          FROM orders
+          GROUP BY 1
+          ORDER BY count DESC
+        label: status
+        value: count
+      - name: Region to Status Flow
+        type: chart
+        chart: sankey
+        col: 6
+        sql: |
+          SELECT
+            s.region AS source,
+            o.status AS target,
+            COUNT(*) AS value
+          FROM orders o
+          JOIN sales s ON s.id = o.id
+          GROUP BY 1, 2
+          ORDER BY 1, 2
+        source: source
+        target: target
+        value: value
+
+  # Heatmap + Calendar
+  - widgets:
+      - name: Region x Month Revenue
+        type: chart
+        chart: heatmap
+        col: 6
+        sql: |
+          SELECT
+            region,
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            SUM(amount)::INTEGER AS revenue
+          FROM sales
+          GROUP BY 1, 2
+          ORDER BY 1, 2
+        x: month
+        y: [region]
+        value: revenue
+      - name: Daily Sales Calendar
+        type: chart
+        chart: calendar
+        col: 6
+        sql: |
+          SELECT
+            STRFTIME(created_at, '%Y-%m-%d') AS date,
+            SUM(amount)::INTEGER AS revenue
+          FROM sales
+          GROUP BY 1
+          ORDER BY 1
+        x: date
+        value: revenue
+
+  # Bubble + Dumbbell
+  - widgets:
+      - name: Monthly Sales (Bubble)
+        type: chart
+        chart: bubble
+        col: 6
+        sql: |
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            SUM(amount)::INTEGER AS revenue,
+            COUNT(*) AS num_sales,
+            ROUND(AVG(amount), 0)::INTEGER AS avg_amount
+          FROM sales
+          GROUP BY 1 ORDER BY 1
+        x: month
+        y: [revenue]
+        size: num_sales
+      - name: H1 vs H2 Revenue by Region
+        type: chart
+        chart: dumbbell
+        col: 6
+        sql: |
+          SELECT
+            region,
+            SUM(CASE WHEN created_at < '2025-07-01' THEN amount ELSE 0 END)::INTEGER AS h1_revenue,
+            SUM(CASE WHEN created_at >= '2025-07-01' THEN amount ELSE 0 END)::INTEGER AS h2_revenue
+          FROM sales
+          GROUP BY 1
+          ORDER BY 1
+        x: region
+        y: [h1_revenue, h2_revenue]
+
+  # Boxplot
+  - widgets:
+      - name: Order Amount by Status
+        type: chart
+        chart: boxplot
+        col: 12
+        sql: |
+          SELECT status, amount
+          FROM orders
+          ORDER BY status
+        x: status
+        y: [amount]

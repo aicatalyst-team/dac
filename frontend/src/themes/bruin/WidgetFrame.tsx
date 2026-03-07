@@ -6,10 +6,40 @@ const containerClass: Record<string, string> = {
   chart: "py-3 px-4 h-full border border-[var(--dac-border)] rounded",
   table: "py-3 h-full border border-[var(--dac-border)] rounded overflow-hidden",
   text: "py-3 h-full",
+  divider: "py-2 h-full flex items-center",
+  image: "py-3 h-full",
 };
 
 export function BruinWidgetFrame({ widget, data, isLoading }: WidgetFrameProps) {
   const { MetricWidget, ChartWidget, TableWidget, TextWidget } = useTemplate();
+
+  // Divider: just a horizontal line, no title or data.
+  if (widget.type === "divider") {
+    return (
+      <div className={containerClass.divider}>
+        <hr className="w-full border-t border-[var(--dac-border)]" />
+      </div>
+    );
+  }
+
+  // Image: render an img tag with optional title.
+  if (widget.type === "image") {
+    return (
+      <div className={containerClass.image}>
+        {widget.name && (
+          <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--dac-text-muted)] mb-1.5">
+            {widget.name}
+          </div>
+        )}
+        <img
+          src={widget.src}
+          alt={widget.alt ?? widget.name ?? ""}
+          className="max-w-full rounded"
+        />
+      </div>
+    );
+  }
+
   const isTable = widget.type === "table";
 
   return (

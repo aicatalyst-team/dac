@@ -34,19 +34,24 @@ func serveCmd() *cli.Command {
 				Name:  "open",
 				Usage: "Open browser automatically",
 			},
+			&cli.StringFlag{
+				Name:  "password",
+				Usage: "Admin password for management API (admin endpoints disabled if not set)",
+			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			dir := cmd.String("dir")
 			configFile := resolveConfigOptional(cmd, dir)
 
 			srv, err := server.New(server.Config{
-				Host:         cmd.String("host"),
-				Port:         int(cmd.Int("port")),
-				DashboardDir: dir,
-				TemplateName: cmd.String("template"),
-				ConfigFile:   configFile,
-				Environment:  cmd.Root().String("environment"),
-				Frontend:     frontendFS,
+				Host:          cmd.String("host"),
+				Port:          int(cmd.Int("port")),
+				DashboardDir:  dir,
+				TemplateName:  cmd.String("template"),
+				ConfigFile:    configFile,
+				Environment:   cmd.Root().String("environment"),
+				AdminPassword: cmd.String("password"),
+				Frontend:      frontendFS,
 			})
 			if err != nil {
 				return err

@@ -1,11 +1,18 @@
 package dashboard
 
+import (
+	"fmt"
+	"time"
+)
+
 // Widget type constants.
 const (
-	WidgetTypeMetric = "metric"
-	WidgetTypeChart  = "chart"
-	WidgetTypeTable  = "table"
-	WidgetTypeText   = "text"
+	WidgetTypeMetric  = "metric"
+	WidgetTypeChart   = "chart"
+	WidgetTypeTable   = "table"
+	WidgetTypeText    = "text"
+	WidgetTypeDivider = "divider"
+	WidgetTypeImage   = "image"
 )
 
 // Dashboard represents a complete dashboard definition loaded from YAML.
@@ -39,6 +46,7 @@ type FilterOptions struct {
 	Values     []string `yaml:"values,omitempty" json:"values,omitempty"`
 	Query      string   `yaml:"query,omitempty" json:"query,omitempty"`
 	Connection string   `yaml:"connection,omitempty" json:"connection,omitempty"`
+	Presets    []string `yaml:"presets,omitempty" json:"presets,omitempty"` // date-range: which presets to show
 }
 
 // Query represents a named query definition.
@@ -75,18 +83,29 @@ type Widget struct {
 	Format string `yaml:"format,omitempty" json:"format,omitempty"`
 
 	// Chart fields
-	Chart   string   `yaml:"chart,omitempty" json:"chart,omitempty"` // line, bar, area, pie
+	Chart   string   `yaml:"chart,omitempty" json:"chart,omitempty"` // line, bar, area, pie, scatter, bubble, combo, histogram, boxplot, funnel, sankey, heatmap, calendar, sparkline, waterfall, xmr, dumbbell
 	X       string   `yaml:"x,omitempty" json:"x,omitempty"`
 	Y       []string `yaml:"y,omitempty" json:"y,omitempty"`
-	Label   string   `yaml:"label,omitempty" json:"label,omitempty"`   // for pie charts
-	Value   string   `yaml:"value,omitempty" json:"value,omitempty"`   // for pie charts
+	Label   string   `yaml:"label,omitempty" json:"label,omitempty"`   // for pie/funnel
+	Value   string   `yaml:"value,omitempty" json:"value,omitempty"`   // for pie/funnel/heatmap/calendar
 	Stacked bool     `yaml:"stacked,omitempty" json:"stacked,omitempty"` // for bar/area charts
+	Size    string   `yaml:"size,omitempty" json:"size,omitempty"`     // bubble: size dimension column
+	Source  string   `yaml:"source,omitempty" json:"source,omitempty"` // sankey: source column
+	Target  string   `yaml:"target,omitempty" json:"target,omitempty"` // sankey: target column
+	Bins    int      `yaml:"bins,omitempty" json:"bins,omitempty"`     // histogram: number of bins
+	Lines   []string `yaml:"lines,omitempty" json:"lines,omitempty"`   // combo: which y series render as lines
+	YMin    string   `yaml:"yMin,omitempty" json:"yMin,omitempty"`     // xmr: min control limit column
+	YMax    string   `yaml:"yMax,omitempty" json:"yMax,omitempty"`     // xmr: max control limit column
 
 	// Table fields
 	Columns []TableColumn `yaml:"columns,omitempty" json:"columns,omitempty"`
 
 	// Text fields
 	Content string `yaml:"content,omitempty" json:"content,omitempty"`
+
+	// Image fields
+	Src string `yaml:"src,omitempty" json:"src,omitempty"`
+	Alt string `yaml:"alt,omitempty" json:"alt,omitempty"`
 }
 
 type TableColumn struct {
@@ -96,14 +115,66 @@ type TableColumn struct {
 }
 
 // DefaultFilters returns a map of filter names to their default values.
+// For date-range filters, string defaults like "last_30_days" are resolved
+// to {start, end} maps so that query templating works correctly.
 func (d *Dashboard) DefaultFilters() map[string]any {
 	defaults := make(map[string]any)
 	for _, f := range d.Filters {
 		if f.Default != nil {
-			defaults[f.Name] = f.Default
+			val := f.Default
+			if f.Type == "date-range" {
+				if preset, ok := val.(string); ok {
+					if resolved := ResolveDatePreset(preset); resolved != nil {
+						val = resolved
+					}
+				}
+			}
+			defaults[f.Name] = val
 		}
 	}
 	return defaults
+}
+
+// ResolveDatePreset converts a preset key like "last_30_days" into a
+// map with "start" and "end" date strings. Returns nil if the key is unknown.
+func ResolveDatePreset(key string) map[string]any {
+	now := time.Now()
+	today := now.Format("2006-01-02")
+
+	switch key {
+	case "today":
+		return map[string]any{"start": today, "end": today}
+	case "yesterday":
+		d := now.AddDate(0, 0, -1).Format("2006-01-02")
+		return map[string]any{"start": d, "end": d}
+	case "last_7_days":
+		return map[string]any{"start": now.AddDate(0, 0, -6).Format("2006-01-02"), "end": today}
+	case "last_30_days":
+		return map[string]any{"start": now.AddDate(0, 0, -29).Format("2006-01-02"), "end": today}
+	case "last_90_days":
+		return map[string]any{"start": now.AddDate(0, 0, -89).Format("2006-01-02"), "end": today}
+	case "this_month":
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		end := start.AddDate(0, 1, -1)
+		return map[string]any{"start": start.Format("2006-01-02"), "end": end.Format("2006-01-02")}
+	case "last_month":
+		start := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, now.Location())
+		end := time.Date(now.Year(), now.Month(), 0, 0, 0, 0, 0, now.Location())
+		return map[string]any{"start": start.Format("2006-01-02"), "end": end.Format("2006-01-02")}
+	case "this_quarter":
+		q := (int(now.Month()) - 1) / 3
+		start := time.Date(now.Year(), time.Month(q*3+1), 1, 0, 0, 0, 0, now.Location())
+		end := start.AddDate(0, 3, -1)
+		return map[string]any{"start": start.Format("2006-01-02"), "end": end.Format("2006-01-02")}
+	case "this_year":
+		return map[string]any{"start": fmt.Sprintf("%d-01-01", now.Year()), "end": fmt.Sprintf("%d-12-31", now.Year())}
+	case "year_to_date":
+		return map[string]any{"start": fmt.Sprintf("%d-01-01", now.Year()), "end": today}
+	case "all_time":
+		return map[string]any{"start": "1970-01-01", "end": "2099-12-31"}
+	default:
+		return nil
+	}
 }
 
 // FindByName returns the dashboard with the given name from a slice, or nil.
@@ -150,7 +221,7 @@ func (w *Widget) ResolvedQuery(dashboard *Dashboard) (sql, connection string, er
 		return w.SQL, conn, nil
 
 	default:
-		if w.Type == WidgetTypeText {
+		if w.Type == WidgetTypeText || w.Type == WidgetTypeDivider || w.Type == WidgetTypeImage {
 			return "", "", nil
 		}
 		return "", "", &NoQueryError{Widget: w.Name}

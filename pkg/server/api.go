@@ -114,11 +114,18 @@ func (s *Server) handleBatchQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Merge request filters over dashboard defaults so unset filters
+	// still have values for query templating.
+	filters := d.DefaultFilters()
+	for k, v := range req.Filters {
+		filters[k] = v
+	}
+
 	var jobs []widgetJob
 
 	for i, row := range d.Rows {
 		for j, widget := range row.Widgets {
-			if widget.Type == dashboard.WidgetTypeText {
+			if widget.Type == dashboard.WidgetTypeText || widget.Type == dashboard.WidgetTypeDivider || widget.Type == dashboard.WidgetTypeImage {
 				continue
 			}
 			sql, conn, err := widget.ResolvedQuery(d)
@@ -128,8 +135,8 @@ func (s *Server) handleBatchQuery(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Template filter values into the query.
-			if req.Filters != nil {
-				sql, err = tmpl.Render(sql, req.Filters)
+			if len(filters) > 0 {
+				sql, err = tmpl.Render(sql, filters)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, "template error: "+err.Error())
 					return
@@ -141,29 +148,23 @@ func (s *Server) handleBatchQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Group jobs by connection so same-connection queries run sequentially
-	// (avoids file lock contention for DuckDB, connection pool exhaustion, etc.)
-	// Different connections run in parallel.
-	connGroups := make(map[string][]widgetJob)
-	for _, job := range jobs {
-		connGroups[job.connection] = append(connGroups[job.connection], job)
-	}
-
+	// Execute all widget queries concurrently with a concurrency limit.
 	results := make(map[string]*widgetQueryResult)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	for _, group := range connGroups {
+	sem := make(chan struct{}, 8)
+	for _, j := range jobs {
 		wg.Add(1)
-		go func(groupJobs []widgetJob) {
+		go func(j widgetJob) {
 			defer wg.Done()
-			for _, j := range groupJobs {
-				wr := executeWidgetQuery(r.Context(), s.backend, j)
-				mu.Lock()
-				results[j.id] = wr
-				mu.Unlock()
-			}
-		}(group)
+			sem <- struct{}{}
+			wr := executeWidgetQuery(r.Context(), s.backend, j)
+			<-sem
+			mu.Lock()
+			results[j.id] = wr
+			mu.Unlock()
+		}(j)
 	}
 
 	wg.Wait()

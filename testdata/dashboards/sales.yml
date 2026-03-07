@@ -11,9 +11,7 @@ filters:
       values: ["All", "North America", "Europe", "APAC"]
   - name: date_range
     type: date-range
-    default:
-      start: "2025-01-01"
-      end: "2025-12-31"
+    default: all_time
 
 queries:
   total_revenue:

@@ -53,3 +53,99 @@ export async function listThemes(): Promise<string[]> {
 export async function getTheme(name: string): Promise<Theme> {
   return fetchJSON<Theme>(`${BASE}/themes/${encodeURIComponent(name)}`);
 }
+
+// --- Admin API ---
+
+const ADMIN_PASSWORD_KEY = "dac_admin_password";
+
+export function getAdminPassword(): string | null {
+  return sessionStorage.getItem(ADMIN_PASSWORD_KEY);
+}
+
+export function setAdminPassword(password: string): void {
+  sessionStorage.setItem(ADMIN_PASSWORD_KEY, password);
+}
+
+export function clearAdminPassword(): void {
+  sessionStorage.removeItem(ADMIN_PASSWORD_KEY);
+}
+
+function adminHeaders(): Record<string, string> {
+  const password = getAdminPassword();
+  if (!password) {
+    throw new Error("Not authenticated");
+  }
+  return { Authorization: `Bearer ${password}` };
+}
+
+export async function adminLogin(password: string): Promise<void> {
+  const res = await fetch(`${BASE}/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    throw new Error("Invalid password");
+  }
+  setAdminPassword(password);
+}
+
+export interface AdminConnections {
+  connections: Record<string, Array<{ name: string; [key: string]: unknown }>>;
+}
+
+export async function listConnections(): Promise<AdminConnections> {
+  return fetchJSON<AdminConnections>(`${BASE}/admin/connections`, {
+    headers: adminHeaders(),
+  });
+}
+
+export async function createConnection(
+  type: string,
+  name: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await fetchJSON(`${BASE}/admin/connections`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...adminHeaders() },
+    body: JSON.stringify({ type, name, fields }),
+  });
+}
+
+export async function updateConnection(
+  type: string,
+  name: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await fetchJSON(
+    `${BASE}/admin/connections/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...adminHeaders() },
+      body: JSON.stringify({ fields }),
+    },
+  );
+}
+
+export async function deleteConnection(type: string, name: string): Promise<void> {
+  await fetchJSON(
+    `${BASE}/admin/connections/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
+    {
+      method: "DELETE",
+      headers: adminHeaders(),
+    },
+  );
+}
+
+export async function testConnection(
+  type: string,
+  name: string,
+): Promise<{ ok: boolean }> {
+  return fetchJSON<{ ok: boolean }>(
+    `${BASE}/admin/connections/${encodeURIComponent(type)}/${encodeURIComponent(name)}/test`,
+    {
+      method: "POST",
+      headers: adminHeaders(),
+    },
+  );
+}

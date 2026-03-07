@@ -103,12 +103,20 @@ filters:
       # query: SELECT DISTINCT region FROM dim_regions ORDER BY region
       # connection: my_postgres        # Optional connection override
 
-  # Date range picker
+  # Date range picker (with preset default)
   - name: date_range
     type: date-range
-    default:
-      start: "2025-01-01"
-      end: "2025-12-31"
+    default: last_30_days              # Preset name OR explicit {start, end}
+    # default:                         # Explicit dates also work:
+    #   start: "2025-01-01"
+    #   end: "2025-12-31"
+    options:
+      presets:                         # Optional: control which presets appear
+        - last_7_days
+        - last_30_days
+        - last_90_days
+        - this_month
+        - this_year
 
   # Free text input
   - name: search
@@ -117,6 +125,8 @@ filters:
 ```
 
 **Filter types:** `select`, `date-range`, `text`
+
+**Date range presets:** `today`, `yesterday`, `last_7_days`, `last_30_days`, `last_90_days`, `this_month`, `last_month`, `this_quarter`, `this_year`, `year_to_date`, `all_time`. If `options.presets` is omitted, a default set is shown. Users can always pick "Custom range" for arbitrary dates.
 
 ---
 
@@ -162,7 +172,7 @@ rows:
 
 ## Widget Types
 
-Every widget (except `text`) needs a query source. **Priority order:**
+Every widget (except `text`, `divider`, and `image`) needs a query source. **Priority order:**
 1. `query: <name>` — reference a named query from the `queries:` map
 2. `sql: |` — inline SQL
 3. `file: path/to/query.sql` — external SQL file (relative to the YAML)
@@ -186,14 +196,14 @@ The SQL must return at least one row. The value from `column` in the first row i
 
 ### Chart Widget
 
-Visualizations using Recharts. Four chart types available.
+Visualizations using Recharts. **17 chart types** available.
 
-**Line / Bar / Area charts:**
+#### Line / Bar / Area
 
 ```yaml
 - name: Revenue Trend
   type: chart
-  chart: line                   # REQUIRED: line | bar | area
+  chart: line                   # line | bar | area
   sql: |
     SELECT month, revenue, target FROM monthly_data ORDER BY month
   x: month                     # REQUIRED: column for X axis
@@ -201,7 +211,7 @@ Visualizations using Recharts. Four chart types available.
   col: 8
 ```
 
-**Stacked bar/area charts:**
+#### Stacked Bar / Area
 
 ```yaml
 - name: Sales by Region
@@ -218,7 +228,7 @@ Visualizations using Recharts. Four chart types available.
   col: 6
 ```
 
-**Pie / Donut charts:**
+#### Pie
 
 ```yaml
 - name: Revenue by Region
@@ -226,10 +236,195 @@ Visualizations using Recharts. Four chart types available.
   chart: pie
   sql: |
     SELECT region, SUM(amount) as total FROM sales GROUP BY 1
-  label: region                 # REQUIRED for pie: category column
-  value: total                  # REQUIRED for pie: numeric column
+  label: region                 # REQUIRED: category column
+  value: total                  # REQUIRED: numeric column
   col: 4
 ```
+
+#### Scatter
+
+```yaml
+- name: Price vs Quantity
+  type: chart
+  chart: scatter
+  sql: SELECT price, quantity FROM orders
+  x: price
+  y: [quantity]
+  col: 6
+```
+
+X axis auto-detects numeric vs category data.
+
+#### Bubble
+
+```yaml
+- name: Sales Bubble
+  type: chart
+  chart: bubble
+  sql: SELECT region, revenue, profit, order_count FROM summary
+  x: region                     # X axis
+  y: [revenue]                  # Y axis
+  size: order_count             # REQUIRED: bubble size column
+  col: 6
+```
+
+#### Combo (mixed bar + line)
+
+```yaml
+- name: Revenue vs Growth
+  type: chart
+  chart: combo
+  sql: SELECT month, revenue, growth_pct FROM monthly
+  x: month
+  y: [revenue, growth_pct]
+  lines: [growth_pct]           # Which y series render as lines (rest are bars)
+  col: 8
+```
+
+#### Histogram
+
+```yaml
+- name: Order Distribution
+  type: chart
+  chart: histogram
+  sql: SELECT amount FROM orders
+  x: amount                     # REQUIRED: column to bin
+  bins: 20                      # Optional: number of bins (default: 10)
+  col: 6
+```
+
+Client-side binning of raw data values.
+
+#### Boxplot
+
+```yaml
+- name: Amount by Status
+  type: chart
+  chart: boxplot
+  sql: SELECT status, amount FROM orders
+  x: status                     # Category column
+  y: [amount]                   # Numeric column
+  col: 6
+```
+
+Client-side quartile computation from raw data rows.
+
+#### Funnel
+
+```yaml
+- name: Conversion Funnel
+  type: chart
+  chart: funnel
+  sql: SELECT stage, count FROM funnel_data ORDER BY count DESC
+  label: stage                  # REQUIRED: category column
+  value: count                  # REQUIRED: numeric column
+  col: 6
+```
+
+#### Sankey
+
+```yaml
+- name: Flow Diagram
+  type: chart
+  chart: sankey
+  sql: SELECT source_stage, target_stage, flow_count FROM flows
+  source: source_stage          # REQUIRED: source node column
+  target: target_stage          # REQUIRED: target node column
+  value: flow_count             # REQUIRED: flow weight column
+  col: 8
+```
+
+#### Heatmap
+
+```yaml
+- name: Activity Heatmap
+  type: chart
+  chart: heatmap
+  sql: SELECT day_of_week, hour, event_count FROM activity
+  x: hour                       # REQUIRED: X axis column
+  y: [day_of_week]              # REQUIRED: Y axis column (array with 1 element)
+  value: event_count            # REQUIRED: intensity column
+  col: 8
+```
+
+Custom SVG rendering with hover tooltips.
+
+#### Calendar
+
+```yaml
+- name: Daily Revenue
+  type: chart
+  chart: calendar
+  sql: SELECT date, revenue FROM daily_sales
+  x: date                       # REQUIRED: date column (YYYY-MM-DD)
+  value: revenue                # REQUIRED: intensity column
+  col: 12
+```
+
+GitHub-style calendar heatmap, custom SVG.
+
+#### Sparkline
+
+```yaml
+- name: Revenue Sparkline
+  type: chart
+  chart: sparkline
+  sql: SELECT month, revenue FROM monthly ORDER BY month
+  x: month
+  y: [revenue]
+  col: 3
+```
+
+Compact line chart (60px height), no axes or labels. Great for KPI rows.
+
+#### Waterfall
+
+```yaml
+- name: P&L Waterfall
+  type: chart
+  chart: waterfall
+  sql: |
+    SELECT category, amount FROM pnl
+    ORDER BY CASE category
+      WHEN 'Revenue' THEN 1
+      WHEN 'COGS' THEN 2
+      WHEN 'OpEx' THEN 3
+      WHEN 'Net' THEN 4
+    END
+  x: category
+  y: [amount]
+  col: 8
+```
+
+Positive values shown in one color, negative in another. Bars float to show cumulative effect.
+
+#### XMR (Control Chart)
+
+```yaml
+- name: Process Control
+  type: chart
+  chart: xmr
+  sql: SELECT date, value, mean, ucl, lcl FROM process_data
+  x: date
+  y: [value, mean]              # First = data line, second = center line (dashed)
+  yMin: lcl                     # Lower control limit (dashed)
+  yMax: ucl                     # Upper control limit (dashed)
+  col: 8
+```
+
+#### Dumbbell
+
+```yaml
+- name: H1 vs H2 Revenue
+  type: chart
+  chart: dumbbell
+  sql: SELECT region, h1_revenue, h2_revenue FROM comparison
+  x: region                     # Category column (vertical axis)
+  y: [h1_revenue, h2_revenue]   # Two numeric columns (start and end points)
+  col: 6
+```
+
+Horizontal chart showing range between two values per category.
 
 ### Table Widget
 
@@ -254,16 +449,70 @@ If `columns` is omitted, all result columns are shown with their SQL names as he
 
 ### Text Widget
 
-Static markdown/text content. No query needed.
+Static content with markdown formatting. No query needed.
 
 ```yaml
 - name: Notes
   type: text
   content: |
+    # Section Header
+
     **Important:** Revenue figures are updated daily.
 
     Data source: Snowflake `analytics.sales`
+
+    - Bullet point one
+    - Bullet point two
+
+    1. Ordered item
+    2. Another item
+
+    > This is a blockquote for callouts
+
+    Visit [our docs](https://example.com) for details.
+
+    ---
+
+    *Italic text*, **bold text**, ~~strikethrough~~, and `inline code`.
   col: 12
+```
+
+**Supported markdown syntax:**
+- Headers: `#` through `######`
+- Bold: `**text**` or `__text__`
+- Italic: `*text*` or `_text_`
+- Bold italic: `***text***`
+- Strikethrough: `~~text~~`
+- Inline code: `` `code` ``
+- Links: `[text](url)`
+- Images: `![alt](src)`
+- Unordered lists: `- item` or `* item`
+- Ordered lists: `1. item`
+- Blockquotes: `> text`
+- Horizontal rules: `---`, `***`, or `___`
+
+### Divider Widget
+
+A visual horizontal separator line. No query or content needed.
+
+```yaml
+- name: separator
+  type: divider
+  col: 12
+```
+
+Use dividers to visually separate sections within a dashboard.
+
+### Image Widget
+
+Displays an image from a URL. No query needed.
+
+```yaml
+- name: Company Logo
+  type: image
+  src: https://example.com/logo.png    # REQUIRED: image URL
+  alt: Company logo                     # Optional: alt text
+  col: 4
 ```
 
 ---
@@ -423,9 +672,7 @@ filters:
       values: ["All", "North America", "Europe", "APAC"]
   - name: date_range
     type: date-range
-    default:
-      start: "2025-01-01"
-      end: "2025-12-31"
+    default: this_year
 
 queries:
   total_revenue:
@@ -438,6 +685,7 @@ queries:
       {% endif %}
 
 rows:
+  # KPI row
   - widgets:
       - name: Total Revenue
         type: metric
@@ -460,6 +708,13 @@ rows:
         prefix: "$"
         format: number
 
+  # Section divider
+  - widgets:
+      - name: divider
+        type: divider
+        col: 12
+
+  # Charts
   - widgets:
       - name: Revenue Trend
         type: chart
@@ -478,6 +733,16 @@ rows:
         label: region
         value: total
 
+  # Explanation text
+  - widgets:
+      - name: Data Notes
+        type: text
+        content: |
+          **Note:** Revenue figures are refreshed every 5 minutes.
+          See [documentation](https://example.com) for methodology.
+        col: 12
+
+  # Table
   - widgets:
       - name: Recent Orders
         type: table
@@ -501,15 +766,52 @@ rows:
 
 ---
 
+## Widget Type Reference
+
+| Type | Required Fields | Query Needed | Description |
+|------|----------------|--------------|-------------|
+| `metric` | `column` | Yes | Single KPI number card |
+| `chart` | `chart` + chart-specific | Yes | Visualization (17 chart types) |
+| `table` | — | Yes | Data table with optional column config |
+| `text` | `content` | No | Markdown/text content |
+| `divider` | — | No | Horizontal separator line |
+| `image` | `src` | No | Image from URL |
+
+### Chart Types
+
+| Chart | Required | Optional | Description |
+|-------|----------|----------|-------------|
+| `line` | `x`, `y` | | Line chart |
+| `bar` | `x`, `y` | `stacked` | Bar chart |
+| `area` | `x`, `y` | `stacked` | Area chart |
+| `pie` | `label`, `value` | | Pie/donut chart |
+| `scatter` | `x`, `y` | | Scatter plot |
+| `bubble` | `x`, `y`, `size` | | Bubble chart |
+| `combo` | `x`, `y`, `lines` | | Mixed bar + line chart |
+| `histogram` | `x` | `bins` | Histogram (client-side binning) |
+| `boxplot` | `x`, `y` | | Box-and-whisker plot (client-side quartiles) |
+| `funnel` | `label`, `value` | | Funnel chart |
+| `sankey` | `source`, `target`, `value` | | Sankey/flow diagram |
+| `heatmap` | `x`, `y`, `value` | | Grid heatmap |
+| `calendar` | `x`, `value` | | Calendar heatmap (GitHub-style) |
+| `sparkline` | `x`, `y` | | Compact inline line (60px) |
+| `waterfall` | `x`, `y` | | Waterfall chart |
+| `xmr` | `x`, `y` | `yMin`, `yMax` | Control chart with limits |
+| `dumbbell` | `x`, `y` (2 fields) | | Horizontal range comparison |
+
+---
+
 ## Validation Rules
 
 - `name` is required on the dashboard and every widget.
 - At least one row is required; each row needs at least one widget.
-- `col` must be 1–12; total per row must not exceed 12.
-- Every non-text widget needs a query source (`query`, `sql`, or `file`).
+- `col` must be 1-12; total per row must not exceed 12.
+- Every widget that requires data needs a query source (`query`, `sql`, or `file`).
 - `metric` widgets require `column`.
-- `chart` widgets require `chart` type. Line/bar/area require `x` and `y`. Pie requires `label` and `value`.
+- `chart` widgets require `chart` type plus the chart-specific fields listed above.
 - `text` widgets require `content`.
+- `image` widgets require `src`.
+- `divider` widgets have no required fields.
 - Filter types must be one of: `select`, `date-range`, `text`.
 - Named query references (`query: name`) must exist in the `queries:` map.
 

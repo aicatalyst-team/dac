@@ -1,15 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useDashboard } from "../hooks/useDashboard";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useTemplate } from "../themes/TemplateProvider";
+import { resolvePreset } from "../themes/bruin/FilterBar";
+import type { Filter } from "../types/dashboard";
 
-function buildDefaultFilters(dashboard: { filters?: { name: string; default?: unknown }[] }): Record<string, unknown> {
+function buildDefaultFilters(dashboard: { filters?: Filter[] }): Record<string, unknown> {
   const defaults: Record<string, unknown> = {};
   if (dashboard.filters) {
     for (const f of dashboard.filters) {
       if (f.default !== undefined) {
-        defaults[f.name] = f.default;
+        // For date-range filters, resolve preset string defaults to {start, end}.
+        if (f.type === "date-range" && typeof f.default === "string") {
+          const resolved = resolvePreset(f.default);
+          defaults[f.name] = resolved ?? f.default;
+        } else {
+          defaults[f.name] = f.default;
+        }
       }
     }
   }
@@ -19,8 +27,14 @@ function buildDefaultFilters(dashboard: { filters?: { name: string; default?: un
 export function DashboardView() {
   const { name } = useParams<{ name: string }>();
   const { data: dashboard, isLoading: dashLoading, error: dashError } = useDashboard(name || "");
+
+  const defaultFilters = useMemo(
+    () => dashboard ? buildDefaultFilters(dashboard) : null,
+    [dashboard],
+  );
+
   const [filters, setFilters] = useState<Record<string, unknown> | null>(null);
-  const [defaultsApplied, setDefaultsApplied] = useState(false);
+  const activeFilters = filters ?? defaultFilters;
 
   const {
     DashboardLayout,
@@ -30,17 +44,10 @@ export function DashboardView() {
     WidgetContainer,
   } = useTemplate();
 
-  useEffect(() => {
-    if (dashboard && !defaultsApplied) {
-      setFilters(buildDefaultFilters(dashboard));
-      setDefaultsApplied(true);
-    }
-  }, [dashboard, defaultsApplied]);
-
   const { data: widgetData, isLoading: dataLoading } = useDashboardData(
     name || "",
-    filters ?? undefined,
-    !!filters,
+    activeFilters ?? undefined,
+    !!activeFilters,
   );
 
   if (dashLoading) {
@@ -70,7 +77,7 @@ export function DashboardView() {
   const filterBar = dashboard.filters ? (
     <FilterBar
       filters={dashboard.filters}
-      values={filters ?? {}}
+      values={activeFilters ?? {}}
       onChange={handleFilterChange}
     />
   ) : null;

@@ -97,3 +97,15 @@ func (e *Environment) FindConnection(name string) (*Connection, error) {
 	}
 	return nil, fmt.Errorf("connection %q not found", name)
 }
+
+// Save writes the config back to a YAML file at the given path.
+func (c *Config) Save(path string) error {
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+	return nil
+}

@@ -16,13 +16,14 @@ import (
 
 // Config holds server configuration.
 type Config struct {
-	Host         string
-	Port         int
-	DashboardDir string
-	TemplateName string
-	ConfigFile   string
-	Environment  string
-	Frontend     fs.FS // embedded frontend files, nil for dev mode
+	Host          string
+	Port          int
+	DashboardDir  string
+	TemplateName  string
+	ConfigFile    string
+	Environment   string
+	AdminPassword string
+	Frontend      fs.FS // embedded frontend files, nil for dev mode
 }
 
 // Server is the dac HTTP server.
@@ -93,6 +94,14 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/v1/themes/{name}", s.handleGetTheme)
 	s.mux.HandleFunc("GET /api/v1/config", s.handleConfig)
 	s.mux.HandleFunc("GET /api/v1/events", s.handleSSE)
+
+	// Admin routes.
+	s.mux.HandleFunc("POST /api/v1/admin/login", s.handleAdminLogin)
+	s.mux.HandleFunc("GET /api/v1/admin/connections", s.requireAdmin(s.handleAdminListConnections))
+	s.mux.HandleFunc("POST /api/v1/admin/connections", s.requireAdmin(s.handleAdminCreateConnection))
+	s.mux.HandleFunc("PUT /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminUpdateConnection))
+	s.mux.HandleFunc("DELETE /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminDeleteConnection))
+	s.mux.HandleFunc("POST /api/v1/admin/connections/{type}/{name}/test", s.requireAdmin(s.handleAdminTestConnection))
 
 	// Frontend static files with SPA fallback for client-side routing.
 	if s.config.Frontend != nil {

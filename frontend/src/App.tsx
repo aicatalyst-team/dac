@@ -5,6 +5,7 @@ import { resolveTemplate } from "./themes/registry";
 import { fetchConfig } from "./api/client";
 import { DashboardList } from "./components/DashboardList";
 import { DashboardView } from "./components/DashboardView";
+import { Admin } from "./components/Admin";
 import { useLiveReload } from "./hooks/useLiveReload";
 
 const queryClient = new QueryClient({
@@ -16,7 +17,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function AppContent() {
+function DashboardContent() {
   useLiveReload();
 
   return (
@@ -42,17 +43,26 @@ function AppWithTemplate() {
 
   return (
     <TemplateProvider template={template}>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+      <DashboardContent />
     </TemplateProvider>
+  );
+}
+
+function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/*" element={<AppWithTemplate />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppWithTemplate />
+      <AppRouter />
     </QueryClientProvider>
   );
 }
