@@ -63,18 +63,18 @@ export function BruinWidgetFrame({ widget, data, isLoading }: WidgetFrameProps) 
         <div className={`text-xs text-[var(--dac-error)] font-mono mt-1 ${isTable ? "px-4" : ""}`}>{data.error}</div>
       )}
 
-      {isLoading && !data && <LoadingSkeleton type={widget.type} />}
+      {!data && isLoading && <LoadingSkeleton type={widget.type} />}
 
-      {!isLoading && !data?.error && (
+      {data && !data.error && (
         <>
           {widget.type === "metric" && <MetricWidget widget={widget} data={data} />}
           {widget.type === "chart" && <ChartWidget widget={widget} data={data} />}
           {widget.type === "table" && <TableWidget widget={widget} data={data} />}
-          {widget.type === "text" && <TextWidget widget={widget} />}
-          {!["metric", "chart", "table", "text"].includes(widget.type) && (
-            <div className="text-xs text-[var(--dac-text-muted)]">Unknown widget type: {widget.type}</div>
-          )}
         </>
+      )}
+      {widget.type === "text" && <TextWidget widget={widget} />}
+      {!data && !isLoading && !["text", "divider", "image"].includes(widget.type) && (
+        <div className={`text-xs text-[var(--dac-text-muted)] ${isTable ? "px-4" : ""}`}>No data</div>
       )}
     </div>
   );

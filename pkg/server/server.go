@@ -97,6 +97,7 @@ func (s *Server) setupRoutes() {
 	// API routes.
 	s.mux.HandleFunc("GET /api/v1/dashboards", s.handleListDashboards)
 	s.mux.HandleFunc("GET /api/v1/dashboards/{name}", s.handleGetDashboard)
+	s.mux.HandleFunc("GET /api/v1/dashboards/{name}/raw", s.handleGetDashboardRaw)
 	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/data", s.handleBatchQuery)
 	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/stream", s.handleStreamQuery)
 	s.mux.HandleFunc("POST /api/v1/query", s.handleSingleQuery)

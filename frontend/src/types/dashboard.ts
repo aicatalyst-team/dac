@@ -54,6 +54,11 @@ export interface Widget {
   file?: string;
   connection?: string;
 
+  // Declarative metric/dimensional
+  metric?: string;
+  dimension?: string;
+  metrics?: string[];
+
   // Metric
   column?: string;
   prefix?: string;

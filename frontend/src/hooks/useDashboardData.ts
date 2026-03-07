@@ -17,7 +17,7 @@ export function useDashboardData(
   enabled = true,
 ): StreamState {
   const [data, setData] = useState<Record<string, WidgetData> | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(!!name && enabled);
   const [error, setError] = useState<Error | undefined>(undefined);
   const abortRef = useRef<(() => void) | null>(null);
 
@@ -51,7 +51,10 @@ export function useDashboardData(
   }, [name, filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!name || !enabled) return;
+    if (!name || !enabled) {
+      setIsLoading(false);
+      return;
+    }
 
     startStream();
 

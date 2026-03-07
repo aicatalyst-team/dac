@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Markdown from "react-markdown";
 import { createAgentSession, sendAgentMessage, agentEventsURL } from "../api/client";
+import { ResizeHandle } from "./ResizeHandle";
 
 // A segment is one block in the agent's response stream, in arrival order.
 type Segment =
@@ -43,6 +44,11 @@ export function AgentChat({ dashboardName, isOpen, onClose }: AgentChatProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, setTurnId] = useState<string | null>(null);
+  const [width, setWidth] = useState(380);
+
+  const handleResize = useCallback((delta: number) => {
+    setWidth((w) => Math.max(280, Math.min(600, w + delta)));
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -283,7 +289,11 @@ export function AgentChat({ dashboardName, isOpen, onClose }: AgentChatProps) {
   };
 
   return (
-    <div className={`agent-sidebar ${isOpen ? "" : "agent-sidebar-closed"}`}>
+    <div
+      className={`agent-sidebar ${isOpen ? "" : "agent-sidebar-closed"}`}
+      style={isOpen ? { width, minWidth: width } : undefined}
+    >
+      {isOpen && <ResizeHandle side="right" onResize={handleResize} />}
       {/* Close button */}
       <button
         onClick={onClose}

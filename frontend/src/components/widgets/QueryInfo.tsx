@@ -1,52 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useShikiHighlight } from "../../hooks/useShikiHighlight";
 
 interface Props {
   query: string;
-}
-
-const SQL_KEYWORDS = new Set([
-  "SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "IN", "AS", "ON",
-  "JOIN", "LEFT", "RIGHT", "INNER", "OUTER", "FULL", "CROSS",
-  "GROUP", "BY", "ORDER", "HAVING", "LIMIT", "OFFSET", "UNION",
-  "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "TABLE",
-  "INTO", "VALUES", "SET", "NULL", "IS", "LIKE", "BETWEEN", "EXISTS",
-  "CASE", "WHEN", "THEN", "ELSE", "END", "DISTINCT", "ALL", "ANY",
-  "COUNT", "SUM", "AVG", "MIN", "MAX", "CAST", "COALESCE", "IFNULL",
-  "NULLIF", "ASC", "DESC", "WITH", "RECURSIVE", "OVER", "PARTITION",
-  "ROW_NUMBER", "RANK", "DENSE_RANK", "LAG", "LEAD", "FIRST_VALUE",
-  "LAST_VALUE", "EXTRACT", "DATE", "INTERVAL", "TIMESTAMP", "TRUE",
-  "FALSE", "PARSE_DATE", "FORMAT_DATE", "DATE_TRUNC", "DATE_ADD",
-  "DATE_SUB", "UNNEST", "ARRAY", "STRUCT", "IF", "IIF",
-  "COUNT_DISTINCT",
-]);
-
-function highlightSQL(sql: string): JSX.Element[] {
-  const tokens: JSX.Element[] = [];
-  const regex = /('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|--[^\n]*|\/\*[\s\S]*?\*\/|\b\d+(?:\.\d+)?\b|`[^`]*`|\b[A-Za-z_]\w*\b|[^\s]|\s+)/g;
-  let match;
-  let i = 0;
-
-  while ((match = regex.exec(sql)) !== null) {
-    const token = match[0];
-    const upper = token.toUpperCase();
-
-    if (token.startsWith("'") || token.startsWith('"')) {
-      tokens.push(<span key={i++} style={{ color: "var(--dac-success, #22c55e)" }}>{token}</span>);
-    } else if (token.startsWith("--") || token.startsWith("/*")) {
-      tokens.push(<span key={i++} style={{ color: "var(--dac-text-muted, #6b7280)" }}>{token}</span>);
-    } else if (token.startsWith("`")) {
-      tokens.push(<span key={i++} style={{ color: "var(--dac-chart-2, #06b6d4)" }}>{token}</span>);
-    } else if (/^\d/.test(token)) {
-      tokens.push(<span key={i++} style={{ color: "var(--dac-chart-3, #8b5cf6)" }}>{token}</span>);
-    } else if (SQL_KEYWORDS.has(upper)) {
-      tokens.push(<span key={i++} style={{ color: "var(--dac-accent, #3b82f6)", fontWeight: 600 }}>{token}</span>);
-    } else {
-      tokens.push(<span key={i++}>{token}</span>);
-    }
-  }
-
-  return tokens;
 }
 
 function CopyIcon() {
@@ -74,6 +31,9 @@ export function QueryInfo({ query }: Props) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const trimmed = query.trim();
+  const html = useShikiHighlight(visible ? trimmed : null, "sql");
 
   const cancelHide = useCallback(() => {
     if (hideTimerRef.current) {
@@ -119,11 +79,11 @@ export function QueryInfo({ query }: Props) {
   }, [scheduleHide]);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(query.trim()).then(() => {
+    navigator.clipboard.writeText(trimmed).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
-  }, [query]);
+  }, [trimmed]);
 
   // Position the popover after it renders.
   useEffect(() => {
@@ -226,18 +186,25 @@ export function QueryInfo({ query }: Props) {
                   {copied ? "Copied" : "Copy"}
                 </button>
               </div>
-              <pre
-                className="px-3 py-2.5 overflow-auto text-[11.5px] leading-[1.55]"
-                style={{
-                  color: "var(--dac-text-primary, #111)",
-                  fontFamily: '"Geist Mono", ui-monospace, monospace',
-                  maxHeight: 310,
-                  margin: 0,
-                  whiteSpace: "pre",
-                }}
+              <div
+                className="shiki-highlight px-3 py-2.5 overflow-auto"
+                style={{ maxHeight: 310 }}
               >
-                {highlightSQL(query.trim())}
-              </pre>
+                {html ? (
+                  <div dangerouslySetInnerHTML={{ __html: html }} />
+                ) : (
+                  <pre
+                    className="text-[11.5px] leading-[1.55] m-0"
+                    style={{
+                      color: "var(--dac-text-primary, #111)",
+                      fontFamily: '"Geist Mono", ui-monospace, monospace',
+                      whiteSpace: "pre",
+                    }}
+                  >
+                    {trimmed}
+                  </pre>
+                )}
+              </div>
             </div>
           </div>,
           document.body,

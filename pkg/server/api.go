@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/bruin-data/dac/pkg/dashboard"
@@ -83,6 +84,30 @@ func (s *Server) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "dashboard not found: "+name)
 }
 
+func (s *Server) handleGetDashboardRaw(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+
+	dashboards, err := s.loader.Load()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	for _, d := range dashboards {
+		if d.Name == name {
+			data, err := os.ReadFile(d.FilePath)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to read dashboard file: "+err.Error())
+				return
+			}
+			w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+			w.Write(data)
+			return
+		}
+	}
+	writeError(w, http.StatusNotFound, "dashboard not found: "+name)
+}
+
 type batchQueryRequest struct {
 	Filters map[string]any `json:"filters"`
 }
@@ -134,31 +159,10 @@ func (s *Server) handleBatchQuery(w http.ResponseWriter, r *http.Request) {
 		filters[k] = v
 	}
 
-	var jobs []widgetJob
-
-	for i, row := range d.Rows {
-		for j, widget := range row.Widgets {
-			if widget.Type == dashboard.WidgetTypeText || widget.Type == dashboard.WidgetTypeDivider || widget.Type == dashboard.WidgetTypeImage {
-				continue
-			}
-			sql, conn, err := widget.ResolvedQuery(d)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-
-			// Template filter values into the query.
-			if len(filters) > 0 {
-				sql, err = tmpl.Render(sql, filters)
-				if err != nil {
-					writeError(w, http.StatusBadRequest, "template error: "+err.Error())
-					return
-				}
-			}
-
-			id := widgetID(i, j)
-			jobs = append(jobs, widgetJob{id: id, sql: sql, connection: conn})
-		}
+	jobs, err := s.resolveWidgetJobs(d, filters)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	// Execute all widget queries concurrently with a concurrency limit.
@@ -233,6 +237,99 @@ func (s *Server) handleGetTheme(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
+// resolveWidgetJobs builds the list of SQL jobs for all data-bearing widgets
+// in a dashboard, including declarative metric and dimensional widgets.
+func (s *Server) resolveWidgetJobs(d *dashboard.Dashboard, filters map[string]any) ([]widgetJob, error) {
+	// Extract date filter values for declarative SQL generation.
+	var dateFilter map[string]any
+	if dfName := d.DateRangeFilterName(); dfName != "" {
+		if df, ok := filters[dfName]; ok {
+			if m, ok := df.(map[string]any); ok {
+				dateFilter = m
+			}
+		}
+	}
+
+	var jobs []widgetJob
+	for i, row := range d.Rows {
+		for j, widget := range row.Widgets {
+			if widget.Type == dashboard.WidgetTypeText || widget.Type == dashboard.WidgetTypeDivider || widget.Type == dashboard.WidgetTypeImage {
+				continue
+			}
+
+			var sql, conn string
+			var err error
+
+			switch {
+			case widget.MetricRef != "" && d.Source != nil:
+				// Declarative metric widget: generate scalar query.
+				sql, err = generateSingleMetricSQL(d, widget.MetricRef, dateFilter)
+				if err != nil {
+					return nil, fmt.Errorf("widget %q: %w", widget.Name, err)
+				}
+				conn = d.SourceConnection()
+
+			case len(widget.MetricRefs) > 0 && widget.Dimension != "" && d.Source != nil:
+				// Declarative dimensional chart widget.
+				dim, ok := d.Dimensions[widget.Dimension]
+				if !ok {
+					return nil, fmt.Errorf("widget %q: dimension %q not found", widget.Name, widget.Dimension)
+				}
+				sql, err = dashboard.GenerateDimensionalSQL(d.Source, d.Metrics, widget.MetricRefs, &dim, dateFilter, widget.Limit)
+				if err != nil {
+					return nil, fmt.Errorf("widget %q: %w", widget.Name, err)
+				}
+				conn = d.SourceConnection()
+
+			default:
+				sql, conn, err = widget.ResolvedQuery(d)
+				if err != nil {
+					return nil, err
+				}
+				if sql == "" {
+					continue
+				}
+			}
+
+			// Render Jinja templates (e.g. source table name with conditionals).
+			if len(filters) > 0 {
+				sql, err = tmpl.Render(sql, filters)
+				if err != nil {
+					return nil, fmt.Errorf("template error: %w", err)
+				}
+			}
+			jobs = append(jobs, widgetJob{id: widgetID(i, j), sql: sql, connection: conn})
+		}
+	}
+	return jobs, nil
+}
+
+// generateSingleMetricSQL builds a scalar SQL query for a single metric widget.
+// Expression metrics are inlined as SQL so the database evaluates them directly.
+func generateSingleMetricSQL(d *dashboard.Dashboard, metricName string, dateFilter map[string]any) (string, error) {
+	m, ok := d.Metrics[metricName]
+	if !ok {
+		return "", fmt.Errorf("metric %q not found", metricName)
+	}
+
+	// For expression metrics, use GenerateDimensionalSQL machinery but without a GROUP BY.
+	// Build a simple SELECT <expr> as value FROM <source> WHERE <date>.
+	if m.IsExpression() {
+		// Generate the merged metrics query and wrap the expression.
+		metricsSQL, err := dashboard.GenerateMetricsSQL(d.Source, d.Metrics, dateFilter)
+		if err != nil {
+			return "", err
+		}
+		// The merged query returns all aggregate metrics as columns. Wrap it
+		// in a subquery and compute the expression.
+		return fmt.Sprintf("SELECT (%s) as value FROM (%s)", m.Expression, metricsSQL), nil
+	}
+
+	// Direct aggregate metric: generate a single-column query.
+	onlyThis := map[string]dashboard.Metric{metricName: m}
+	return dashboard.GenerateMetricsSQL(d.Source, onlyThis, dateFilter)
+}
+
 func executeWidgetQuery(ctx context.Context, backend query.Backend, j widgetJob) *widgetQueryResult {
 	qr, err := backend.Execute(ctx, j.connection, j.sql)
 	if err != nil {
@@ -299,26 +396,10 @@ func (s *Server) handleStreamQuery(w http.ResponseWriter, r *http.Request) {
 		filters[k] = v
 	}
 
-	var jobs []widgetJob
-	for i, row := range d.Rows {
-		for j, widget := range row.Widgets {
-			if widget.Type == dashboard.WidgetTypeText || widget.Type == dashboard.WidgetTypeDivider || widget.Type == dashboard.WidgetTypeImage {
-				continue
-			}
-			sql, conn, err := widget.ResolvedQuery(d)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			if len(filters) > 0 {
-				sql, err = tmpl.Render(sql, filters)
-				if err != nil {
-					writeError(w, http.StatusBadRequest, "template error: "+err.Error())
-					return
-				}
-			}
-			jobs = append(jobs, widgetJob{id: widgetID(i, j), sql: sql, connection: conn})
-		}
+	jobs, err := s.resolveWidgetJobs(d, filters)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	// Set up streaming response.

@@ -31,6 +31,15 @@ export async function getDashboard(name: string): Promise<Dashboard> {
   return fetchJSON<Dashboard>(`${BASE}/dashboards/${encodeURIComponent(name)}`);
 }
 
+export async function getDashboardRaw(name: string): Promise<string> {
+  const res = await fetch(`${BASE}/dashboards/${encodeURIComponent(name)}/raw`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error ${res.status}: ${body}`);
+  }
+  return res.text();
+}
+
 export async function fetchDashboardData(
   name: string,
   filters?: Record<string, unknown>,

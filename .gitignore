@@ -6,3 +6,4 @@ frontend/node_modules/
 .bruin.yml
 *.db
 .sessions/
+tmp/

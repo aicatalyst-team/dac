@@ -5,6 +5,7 @@ import { useDashboardData } from "../hooks/useDashboardData";
 import { useTemplate } from "../themes/TemplateProvider";
 import { resolvePreset } from "../themes/bruin/FilterBar";
 import { AgentChat } from "./AgentChat";
+import { YamlPanel } from "./YamlPanel";
 import type { Filter } from "../types/dashboard";
 
 function buildDefaultFilters(dashboard: { filters?: Filter[] }): Record<string, unknown> {
@@ -28,6 +29,7 @@ export function DashboardView() {
   const { name } = useParams<{ name: string }>();
   const { data: dashboard, isLoading: dashLoading, error: dashError } = useDashboard(name || "");
   const [agentOpen, setAgentOpen] = useState(false);
+  const [yamlOpen, setYamlOpen] = useState(false);
 
   const defaultFilters = useMemo(
     () => dashboard ? buildDefaultFilters(dashboard) : null,
@@ -83,27 +85,39 @@ export function DashboardView() {
     />
   ) : null;
 
-  const agentButton = (
-    <button
-      onClick={() => setAgentOpen(!agentOpen)}
-      className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-colors duration-100 ${
-        agentOpen
-          ? "border-[var(--dac-accent)] text-[var(--dac-accent)]"
-          : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)]"
-      }`}
-      title="Edit with AI"
-    >
-      {agentOpen ? (
+  const headerActions = (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => setYamlOpen(!yamlOpen)}
+        className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-colors duration-100 ${
+          yamlOpen
+            ? "border-[var(--dac-accent)] text-[var(--dac-accent)]"
+            : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)]"
+        }`}
+        title="View YAML"
+      >
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 4L12 12M12 4L4 12" />
+          <path d="M5 2H3C2.45 2 2 2.45 2 3V13C2 13.55 2.45 14 3 14H13C13.55 14 14 13.55 14 13V11" />
+          <path d="M7 9L14 2" />
+          <path d="M10 2H14V6" />
         </svg>
-      ) : (
+        YAML
+      </button>
+      <button
+        onClick={() => setAgentOpen(!agentOpen)}
+        className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-colors duration-100 ${
+          agentOpen
+            ? "border-[var(--dac-accent)] text-[var(--dac-accent)]"
+            : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)]"
+        }`}
+        title="Edit with AI"
+      >
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z" />
         </svg>
-      )}
-      {agentOpen ? "Close" : "Edit"}
-    </button>
+        Edit
+      </button>
+    </div>
   );
 
   return (
@@ -114,7 +128,7 @@ export function DashboardView() {
         onClose={() => setAgentOpen(false)}
       />
       <div className="flex-1 overflow-y-auto">
-        <DashboardLayout dashboard={dashboard} filterBar={filterBar} headerActions={agentButton}>
+        <DashboardLayout dashboard={dashboard} filterBar={filterBar} headerActions={headerActions}>
           {dashboard.rows.map((row, rowIdx) => (
             <div
               key={rowIdx}
@@ -140,6 +154,11 @@ export function DashboardView() {
           ))}
         </DashboardLayout>
       </div>
+      <YamlPanel
+        dashboardName={name || ""}
+        isOpen={yamlOpen}
+        onClose={() => setYamlOpen(false)}
+      />
     </div>
   );
 }

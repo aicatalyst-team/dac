@@ -47,11 +47,17 @@ format:
 	@echo "$(OK_COLOR)>> [go vet] running$(NO_COLOR)"
 	@go vet ./cmd/... ./pkg/...
 
+# Run both frontend and backend with live reload
+dev:
+	@trap 'kill 0' EXIT; \
+	$(MAKE) dev-backend & \
+	$(MAKE) dev-frontend & \
+	wait
+
 # Run frontend dev server (with API proxy to Go backend on :8321)
 dev-frontend:
 	@cd frontend && npm run dev
 
-# Run Go backend in dev mode
+# Run Go backend with live reload via air
 dev-backend:
-	@go build -o "$(BUILD_DIR)/$(NAME)" "$(BUILD_SRC)"
-	@./$(BUILD_DIR)/$(NAME) serve --dir ./testdata/dashboards --port 8321
+	@air
