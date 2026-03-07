@@ -1,0 +1,206 @@
+name: Sales Analytics
+description: Real-time sales performance and revenue tracking
+connection: local_duckdb
+
+filters:
+  - name: region
+    type: select
+    multiple: false
+    default: "All"
+    options:
+      values: ["All", "North America", "Europe", "APAC"]
+  - name: date_range
+    type: date-range
+    default:
+      start: "2025-01-01"
+      end: "2025-12-31"
+
+queries:
+  total_revenue:
+    sql: |
+      SELECT SUM(amount) as value FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at <= '{{ filters.date_range.end }}'
+      {% if filters.region != 'All' %}
+        AND region = '{{ filters.region }}'
+      {% endif %}
+  revenue_by_month:
+    file: queries/revenue_by_month.sql
+
+rows:
+  # KPI row
+  - widgets:
+      - name: Total Revenue
+        type: metric
+        query: total_revenue
+        column: value
+        prefix: "$"
+        format: number
+        col: 3
+      - name: Total Orders
+        type: metric
+        col: 3
+        sql: |
+          SELECT COUNT(*) as total FROM orders
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+        column: total
+        format: number
+      - name: Avg Order Value
+        type: metric
+        col: 3
+        sql: |
+          SELECT ROUND(AVG(amount), 2) as avg_value FROM orders
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+        column: avg_value
+        prefix: "$"
+        format: number
+      - name: Completion Rate
+        type: metric
+        col: 3
+        sql: |
+          SELECT ROUND(100.0 * SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) / COUNT(*), 1) as rate
+          FROM orders
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+        column: rate
+        suffix: "%"
+        format: number
+
+  # Revenue trend + region breakdown
+  - widgets:
+      - name: Revenue Trend
+        type: chart
+        chart: area
+        query: revenue_by_month
+        x: month
+        y: [revenue]
+        col: 8
+      - name: Revenue by Region
+        type: chart
+        chart: pie
+        col: 4
+        sql: |
+          SELECT region, SUM(amount) as total FROM sales
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+          {% if filters.region != 'All' %}
+            AND region = '{{ filters.region }}'
+          {% endif %}
+          GROUP BY 1
+        label: region
+        value: total
+
+  # Orders by month + status breakdown
+  - widgets:
+      - name: Sales by Region
+        type: chart
+        chart: bar
+        stacked: true
+        col: 6
+        sql: |
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            SUM(CASE WHEN region = 'North America' THEN amount ELSE 0 END) AS "North America",
+            SUM(CASE WHEN region = 'Europe' THEN amount ELSE 0 END) AS "Europe",
+            SUM(CASE WHEN region = 'APAC' THEN amount ELSE 0 END) AS "APAC"
+          FROM sales
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+          {% if filters.region != 'All' %}
+            AND region = '{{ filters.region }}'
+          {% endif %}
+          GROUP BY 1
+          ORDER BY 1
+        x: month
+        y: ["North America", "Europe", "APAC"]
+      - name: Order Status
+        type: chart
+        chart: pie
+        col: 6
+        sql: |
+          SELECT status, COUNT(*) as count FROM orders
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+          GROUP BY 1
+          ORDER BY 2 DESC
+        label: status
+        value: count
+
+  # Top customers + region revenue table
+  - widgets:
+      - name: Top Customers
+        type: table
+        col: 6
+        sql: |
+          SELECT
+            customer_name,
+            COUNT(*) as orders,
+            SUM(amount) as total_spent,
+            ROUND(AVG(amount), 2) as avg_order
+          FROM orders
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+          GROUP BY 1
+          ORDER BY 3 DESC
+          LIMIT 10
+        columns:
+          - name: customer_name
+            label: Customer
+          - name: orders
+            label: Orders
+            format: number
+          - name: total_spent
+            label: Total Spent
+            format: currency
+          - name: avg_order
+            label: Avg Order
+            format: currency
+      - name: Revenue by Region & Month
+        type: table
+        col: 6
+        sql: |
+          SELECT
+            region,
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            COUNT(*) as sales_count,
+            SUM(amount) as revenue
+          FROM sales
+          WHERE created_at >= '{{ filters.date_range.start }}'
+            AND created_at <= '{{ filters.date_range.end }}'
+          {% if filters.region != 'All' %}
+            AND region = '{{ filters.region }}'
+          {% endif %}
+          GROUP BY 1, 2
+          ORDER BY 1, 2
+        columns:
+          - name: region
+            label: Region
+          - name: month
+            label: Month
+          - name: sales_count
+            label: Sales
+            format: number
+          - name: revenue
+            label: Revenue
+            format: currency
+
+  # Recent orders
+  - widgets:
+      - name: Recent Orders
+        type: table
+        file: queries/recent_orders.sql
+        columns:
+          - name: id
+            label: Order ID
+          - name: customer_name
+            label: Customer
+          - name: amount
+            label: Amount
+            format: currency
+          - name: status
+            label: Status
+          - name: created_at
+            label: Date
+        col: 12
