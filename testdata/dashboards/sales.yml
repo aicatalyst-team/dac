@@ -11,7 +11,7 @@ filters:
       values: ["All", "North America", "Europe", "APAC"]
   - name: date_range
     type: date-range
-    default: all_time
+    default: last_90_days
 
 queries:
   total_revenue:

@@ -59,6 +59,27 @@ func LoadFile(path string) (*Dashboard, error) {
 		return nil, err
 	}
 
+	// Auto-set fields for declarative widgets so the frontend works unchanged.
+	for i, row := range d.Rows {
+		for j, w := range row.Widgets {
+			// Metric-ref: auto-set column.
+			if w.MetricRef != "" && w.Column == "" {
+				d.Rows[i].Widgets[j].Column = "value"
+			}
+			// Dimensional chart: auto-set x and y from dimension/metrics.
+			if w.Dimension != "" && len(w.MetricRefs) > 0 {
+				if dim, ok := d.Dimensions[w.Dimension]; ok {
+					if w.X == "" {
+						d.Rows[i].Widgets[j].X = DimensionAlias(dim.Column)
+					}
+				}
+				if len(w.Y) == 0 {
+					d.Rows[i].Widgets[j].Y = w.MetricRefs
+				}
+			}
+		}
+	}
+
 	return &d, nil
 }
 

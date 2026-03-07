@@ -82,6 +82,19 @@ filters: []
 
 # Optional: named queries (reusable across widgets)
 queries: {}
+
+# Optional: declarative data source (enables metrics & dimensions)
+source:
+  table: my_schema.my_table
+  date_column: created_at             # For automatic date range filtering
+  date_format: "%Y%m%d"              # strftime format if date is stored as string
+  connection: my_postgres             # Overrides dashboard-level connection
+
+# Optional: reusable metric definitions
+metrics: {}
+
+# Optional: reusable dimension definitions
+dimensions: {}
 ```
 
 ---
@@ -148,6 +161,94 @@ queries:
 
 ---
 
+## Declarative Source, Metrics & Dimensions
+
+Instead of writing repetitive SQL for every widget, you can define a **source table**, **metrics**, and **dimensions** at the top level. The tool auto-generates optimized SQL — multiple scalar metrics are merged into a single query, and dimensional charts get automatic GROUP BY queries.
+
+### Source
+
+Defines the base table all metrics and dimensions query against.
+
+```yaml
+source:
+  table: my_schema.events                # REQUIRED: table name (supports Jinja)
+  date_column: event_date                # Optional: enables automatic date range filtering
+  date_format: "%Y%m%d"                  # Optional: strftime format if date is stored as string
+  connection: my_postgres                # Optional: overrides dashboard-level connection
+```
+
+The `table` field supports Jinja templating for dynamic table selection:
+
+```yaml
+source:
+  table: "`project.{% if filters.env == 'prod' %}prod_dataset{% else %}dev_dataset{% endif %}.events`"
+```
+
+### Metrics
+
+Metrics define reusable aggregate calculations. Two types:
+
+**Aggregate metrics** — map to SQL aggregation functions:
+
+```yaml
+metrics:
+  page_views:
+    aggregate: count                     # count, count_distinct, sum, avg, min, max
+    # column not needed for count
+
+  users:
+    aggregate: count_distinct
+    column: user_id                      # REQUIRED for all aggregates except count
+
+  revenue:
+    aggregate: sum
+    column: amount
+
+  high_value_orders:
+    aggregate: count
+    filter:                              # Optional: conditional aggregation
+      status: completed
+      amount_gt: 100                     # Generates: status = 'completed' AND amount_gt = '100'
+```
+
+**Expression metrics** — computed from other metrics (no SQL, evaluated client-side for scalars or inlined as SQL for dimensional queries):
+
+```yaml
+metrics:
+  pages_per_session:
+    expression: page_views / sessions    # Arithmetic using other metric names
+
+  conversion_rate:
+    expression: conversions / visits * 100
+```
+
+Supported aggregates: `count`, `count_distinct`, `sum`, `avg`, `min`, `max`.
+
+Expression operators: `+`, `-`, `*`, `/`, parentheses. Division is automatically wrapped with `NULLIF(..., 0)` for safety.
+
+### Dimensions
+
+Dimensions define GROUP BY columns for chart widgets:
+
+```yaml
+dimensions:
+  daily:
+    column: event_date
+    type: date                           # "date" = chronological ORDER BY ASC
+
+  country:
+    column: geo.country                  # Dotted paths work (aliased as "country")
+
+  event:
+    column: event_name                   # No type = ORDER BY metric DESC (top-N)
+```
+
+- `type: date` dimensions sort chronologically (ASC).
+- Other dimensions sort by the first metric descending (top-N pattern).
+- Dotted column names (e.g. `geo.country`) are auto-aliased to the last segment.
+
+---
+
 ## Rows and Grid
 
 Dashboards use a **12-column grid**. Each row contains widgets whose `col` values should sum to 12 (or less). If `col` is omitted, widgets share space equally.
@@ -179,7 +280,21 @@ Every widget (except `text`, `divider`, and `image`) needs a query source. **Pri
 
 ### Metric Widget
 
-Single KPI number card.
+Single KPI number card. Two modes: **declarative** (using top-level metrics) or **query-based** (using SQL).
+
+**Declarative mode** — reference a top-level metric by name. No SQL needed:
+
+```yaml
+- name: Page Views
+  type: metric
+  metric: page_views              # References a metric from the metrics: map
+  format: number                  # Optional: "number" for locale formatting
+  col: 3
+```
+
+All metric-ref widgets sharing the same dashboard are merged into a **single SQL query** for efficiency. Expression metrics (e.g. `pages_per_session`) are evaluated client-side from the query results.
+
+**Query-based mode** — provide SQL directly:
 
 ```yaml
 - name: Total Revenue
@@ -196,7 +311,42 @@ The SQL must return at least one row. The value from `column` in the first row i
 
 ### Chart Widget
 
-Visualizations using Recharts. **17 chart types** available.
+Visualizations using Recharts. **17 chart types** available. Two modes: **dimensional** (using top-level dimensions + metrics) or **query-based** (using SQL with x/y columns).
+
+#### Dimensional Charts (no SQL needed)
+
+Reference top-level dimensions and metrics. SQL is auto-generated with GROUP BY, ORDER BY, and optional LIMIT:
+
+```yaml
+- name: Daily Traffic
+  type: chart
+  chart: area                       # line | bar | area (or any x/y chart type)
+  dimension: daily                  # References a dimension from dimensions: map
+  metrics: [page_views, users]      # References metrics from metrics: map
+  col: 8
+
+- name: Top Countries
+  type: chart
+  chart: bar
+  dimension: country                # Non-date dimension = sorted by first metric DESC
+  metrics: [users]
+  limit: 8                          # Optional: limit number of results
+  col: 4
+
+- name: Pages/Session Trend
+  type: chart
+  chart: line
+  dimension: daily
+  metrics: [pages_per_session]      # Expression metrics work too — inlined as SQL
+  col: 4
+```
+
+- Date dimensions (`type: date`) sort chronologically (ASC).
+- Other dimensions sort by the first metric descending (top-N).
+- Expression metrics are automatically inlined as SQL with `NULLIF` division safety.
+- The `x` and `y` fields are auto-set by the loader — no need to specify them.
+
+#### Query-Based Charts (SQL mode)
 
 #### Line / Bar / Area
 
@@ -657,7 +807,122 @@ tokens:
 
 ---
 
-## Complete Example
+## Complete Examples
+
+### Declarative Dashboard (source + metrics + dimensions)
+
+Best for dashboards with KPI cards and standard charts over a single source table. No SQL needed for most widgets.
+
+```yaml
+name: Web Analytics
+description: Traffic and engagement metrics
+connection: gcp-default
+
+filters:
+  - name: date_range
+    type: date-range
+    default:
+      start: "2025-01-01"
+      end: "2025-12-31"
+
+source:
+  table: analytics.events
+  date_column: event_date
+
+dimensions:
+  daily:
+    column: event_date
+    type: date
+
+  country:
+    column: geo.country
+
+metrics:
+  page_views:
+    aggregate: count
+    filter:
+      event_name: page_view
+
+  users:
+    aggregate: count_distinct
+    column: user_id
+
+  sessions:
+    aggregate: count
+    filter:
+      event_name: session_start
+
+  pages_per_session:
+    expression: page_views / sessions
+
+rows:
+  # KPI row — all 4 metrics execute as a single SQL query
+  - widgets:
+      - name: Page Views
+        type: metric
+        metric: page_views
+        format: number
+        col: 3
+      - name: Users
+        type: metric
+        metric: users
+        format: number
+        col: 3
+      - name: Sessions
+        type: metric
+        metric: sessions
+        format: number
+        col: 3
+      - name: Pages / Session
+        type: metric
+        metric: pages_per_session
+        col: 3
+
+  # Dimensional charts — SQL auto-generated from source + metrics + dimensions
+  - widgets:
+      - name: Daily Traffic
+        type: chart
+        chart: area
+        dimension: daily
+        metrics: [page_views, users]
+        col: 8
+      - name: Pages/Session Trend
+        type: chart
+        chart: line
+        dimension: daily
+        metrics: [pages_per_session]
+        col: 4
+
+  - widgets:
+      - name: Top Countries
+        type: chart
+        chart: bar
+        dimension: country
+        metrics: [users]
+        limit: 8
+        col: 6
+
+      # You can still use raw SQL alongside declarative widgets
+      - name: Top Pages
+        type: table
+        col: 6
+        sql: |
+          SELECT page_title as page, COUNT(*) as views
+          FROM analytics.events
+          WHERE event_name = 'page_view'
+            AND event_date >= '{{ filters.date_range.start }}'
+          GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+        columns:
+          - name: page
+            label: Page
+          - name: views
+            label: Views
+            format: number
+```
+
+### Query-Based Dashboard (SQL mode)
+
+Best for complex queries, JOINs, custom transformations, or multi-source dashboards.
 
 ```yaml
 name: Sales Analytics
@@ -685,7 +950,6 @@ queries:
       {% endif %}
 
 rows:
-  # KPI row
   - widgets:
       - name: Total Revenue
         type: metric
@@ -708,13 +972,6 @@ rows:
         prefix: "$"
         format: number
 
-  # Section divider
-  - widgets:
-      - name: divider
-        type: divider
-        col: 12
-
-  # Charts
   - widgets:
       - name: Revenue Trend
         type: chart
@@ -733,16 +990,6 @@ rows:
         label: region
         value: total
 
-  # Explanation text
-  - widgets:
-      - name: Data Notes
-        type: text
-        content: |
-          **Note:** Revenue figures are refreshed every 5 minutes.
-          See [documentation](https://example.com) for methodology.
-        col: 12
-
-  # Table
   - widgets:
       - name: Recent Orders
         type: table
@@ -768,14 +1015,14 @@ rows:
 
 ## Widget Type Reference
 
-| Type | Required Fields | Query Needed | Description |
+| Type | Required Fields | Query Source | Description |
 |------|----------------|--------------|-------------|
-| `metric` | `column` | Yes | Single KPI number card |
-| `chart` | `chart` + chart-specific | Yes | Visualization (17 chart types) |
-| `table` | — | Yes | Data table with optional column config |
-| `text` | `content` | No | Markdown/text content |
-| `divider` | — | No | Horizontal separator line |
-| `image` | `src` | No | Image from URL |
+| `metric` | `metric:` ref OR `column` + query | Declarative or SQL | Single KPI number card |
+| `chart` | `dimension` + `metrics` OR `chart` + x/y + query | Declarative or SQL | Visualization (17 chart types) |
+| `table` | — | SQL | Data table with optional column config |
+| `text` | `content` | None | Markdown/text content |
+| `divider` | — | None | Horizontal separator line |
+| `image` | `src` | None | Image from URL |
 
 ### Chart Types
 
@@ -806,13 +1053,22 @@ rows:
 - `name` is required on the dashboard and every widget.
 - At least one row is required; each row needs at least one widget.
 - `col` must be 1-12; total per row must not exceed 12.
-- Every widget that requires data needs a query source (`query`, `sql`, or `file`).
-- `metric` widgets require `column`.
-- `chart` widgets require `chart` type plus the chart-specific fields listed above.
+- Every widget that requires data needs a query source (`query`, `sql`, `file`) OR a declarative reference (`metric:` for metric widgets, `dimension:` + `metrics:` for chart widgets).
+- `metric` widgets require either `metric: <name>` (declarative) or `column` + query source (SQL mode).
+- `chart` widgets require `chart` type plus either `dimension` + `metrics` (declarative) or chart-specific fields (SQL mode).
 - `text` widgets require `content`.
 - `image` widgets require `src`.
 - `divider` widgets have no required fields.
 - Filter types must be one of: `select`, `date-range`, `text`.
 - Named query references (`query: name`) must exist in the `queries:` map.
+- `source` is required when `metrics` or `dimensions` are defined; `source.table` is required.
+- Each metric must have either `aggregate` or `expression` (not both).
+- Valid aggregates: `count`, `count_distinct`, `sum`, `avg`, `min`, `max`.
+- Non-count aggregates require `column`.
+- Expression metrics can only reference other defined metrics.
+- Dimensions require `column`; `type` must be `"date"` or omitted.
+- `metric:` refs must reference a metric in the `metrics:` map.
+- `dimension:` refs must reference a dimension in the `dimensions:` map.
+- `metrics:` list refs on chart widgets must all exist in the `metrics:` map.
 
 Run `dac validate` for structure checks, or `dac check` to also execute all queries and verify they return data.

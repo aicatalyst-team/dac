@@ -49,9 +49,9 @@ func Validate(d *Dashboard) error {
 			// Validate widget type.
 			switch w.Type {
 			case WidgetTypeMetric:
-				errs = append(errs, validateMetricWidget(prefix, &w)...)
+				errs = append(errs, validateMetricWidget(prefix, &w, d)...)
 			case WidgetTypeChart:
-				errs = append(errs, validateChartWidget(prefix, &w)...)
+				errs = append(errs, validateChartWidget(prefix, &w, d)...)
 			case WidgetTypeTable:
 				// Table widgets just need a query source.
 				errs = append(errs, validateQuerySource(prefix, &w, d)...)
@@ -84,6 +84,54 @@ func Validate(d *Dashboard) error {
 		}
 	}
 
+	// Validate source and metrics.
+	if len(d.Metrics) > 0 && d.Source == nil {
+		errs = append(errs, "source is required when metrics are defined")
+	}
+	if d.Source != nil && d.Source.Table == "" {
+		errs = append(errs, "source: table is required")
+	}
+	for name, m := range d.Metrics {
+		prefix := fmt.Sprintf("metric %q", name)
+		if m.Expression != "" {
+			if m.Aggregate != "" {
+				errs = append(errs, fmt.Sprintf("%s: cannot specify both aggregate and expression", prefix))
+			}
+		} else {
+			if m.Aggregate == "" {
+				errs = append(errs, fmt.Sprintf("%s: one of aggregate or expression is required", prefix))
+			} else if !ValidAggregates[m.Aggregate] {
+				errs = append(errs, fmt.Sprintf("%s: unknown aggregate %q", prefix, m.Aggregate))
+			}
+			if m.Aggregate != "count" && m.Column == "" {
+				errs = append(errs, fmt.Sprintf("%s: column is required for %s", prefix, m.Aggregate))
+			}
+		}
+	}
+	// Validate expression references.
+	for name, m := range d.Metrics {
+		if m.Expression == "" {
+			continue
+		}
+		if err := validateExpressionRefs(m.Expression, d.Metrics); err != nil {
+			errs = append(errs, fmt.Sprintf("metric %q: %s", name, err.Error()))
+		}
+	}
+
+	// Validate dimensions.
+	if len(d.Dimensions) > 0 && d.Source == nil {
+		errs = append(errs, "source is required when dimensions are defined")
+	}
+	for name, dim := range d.Dimensions {
+		prefix := fmt.Sprintf("dimension %q", name)
+		if dim.Column == "" {
+			errs = append(errs, fmt.Sprintf("%s: column is required", prefix))
+		}
+		if dim.Type != "" && dim.Type != "date" {
+			errs = append(errs, fmt.Sprintf("%s: unknown type %q (expected \"date\" or empty)", prefix, dim.Type))
+		}
+	}
+
 	// Validate filters.
 	for i, f := range d.Filters {
 		prefix := fmt.Sprintf("filter %d (%q)", i+1, f.Name)
@@ -107,6 +155,10 @@ func Validate(d *Dashboard) error {
 
 func validateQuerySource(prefix string, w *Widget, d *Dashboard) []string {
 	var errs []string
+	if w.MetricRef != "" {
+		// Metric-ref widgets get their query from the metrics system.
+		return errs
+	}
 	if w.QueryRef == "" && w.SQL == "" && w.File == "" {
 		errs = append(errs, fmt.Sprintf("%s: one of query, sql, or file is required", prefix))
 	}
@@ -118,8 +170,40 @@ func validateQuerySource(prefix string, w *Widget, d *Dashboard) []string {
 	return errs
 }
 
-func validateMetricWidget(prefix string, w *Widget) []string {
+func validateExpressionRefs(expr string, metrics map[string]Metric) error {
+	// Extract identifiers from the expression and check they exist in metrics.
+	pos := 0
+	for pos < len(expr) {
+		ch := rune(expr[pos])
+		if ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+			start := pos
+			for pos < len(expr) {
+				c := rune(expr[pos])
+				if c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+					pos++
+				} else {
+					break
+				}
+			}
+			name := expr[start:pos]
+			if _, ok := metrics[name]; !ok {
+				return fmt.Errorf("references unknown metric %q", name)
+			}
+		} else {
+			pos++
+		}
+	}
+	return nil
+}
+
+func validateMetricWidget(prefix string, w *Widget, d *Dashboard) []string {
 	var errs []string
+	if w.MetricRef != "" {
+		if _, ok := d.Metrics[w.MetricRef]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: metric %q not found in metrics map", prefix, w.MetricRef))
+		}
+		return errs
+	}
 	if w.Column == "" {
 		errs = append(errs, fmt.Sprintf("%s: column is required for metric widgets", prefix))
 	}
@@ -134,7 +218,7 @@ var validChartTypes = map[string]bool{
 	"dumbbell": true,
 }
 
-func validateChartWidget(prefix string, w *Widget) []string {
+func validateChartWidget(prefix string, w *Widget, d *Dashboard) []string {
 	var errs []string
 	if w.Chart == "" {
 		errs = append(errs, fmt.Sprintf("%s: chart type is required", prefix))
@@ -142,6 +226,24 @@ func validateChartWidget(prefix string, w *Widget) []string {
 	}
 	if !validChartTypes[w.Chart] {
 		errs = append(errs, fmt.Sprintf("%s: unknown chart type %q", prefix, w.Chart))
+		return errs
+	}
+
+	// Dimensional chart: uses dimension + metrics instead of x/y/sql.
+	if w.Dimension != "" || len(w.MetricRefs) > 0 {
+		if w.Dimension == "" {
+			errs = append(errs, fmt.Sprintf("%s: dimension is required when metrics are specified", prefix))
+		} else if _, ok := d.Dimensions[w.Dimension]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: dimension %q not found in dimensions map", prefix, w.Dimension))
+		}
+		if len(w.MetricRefs) == 0 {
+			errs = append(errs, fmt.Sprintf("%s: metrics are required when dimension is specified", prefix))
+		}
+		for _, ref := range w.MetricRefs {
+			if _, ok := d.Metrics[ref]; !ok {
+				errs = append(errs, fmt.Sprintf("%s: metric %q not found in metrics map", prefix, ref))
+			}
+		}
 		return errs
 	}
 

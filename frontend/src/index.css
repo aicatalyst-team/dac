@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "react-day-picker/style.css";
 
 @font-face {
   font-family: "Geist";
@@ -165,4 +166,73 @@ body {
 
 .recharts-default-tooltip {
   display: none !important;
+}
+
+/* react-day-picker calendar popover */
+.dac-calendar-popover {
+  background: var(--dac-surface);
+  border: 1px solid var(--dac-border);
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
+  font-family: "Geist", system-ui, sans-serif;
+}
+
+.dac-calendar-popover .rdp-root {
+  --rdp-accent-color: var(--dac-accent);
+  --rdp-accent-background-color: color-mix(in srgb, var(--dac-accent) 12%, transparent);
+  --rdp-range_middle-background-color: color-mix(in srgb, var(--dac-accent) 10%, transparent);
+  --rdp-range_middle-color: var(--dac-text-primary);
+  --rdp-range_start-color: #fff;
+  --rdp-range_start-date-background-color: var(--dac-accent);
+  --rdp-range_end-color: #fff;
+  --rdp-range_end-date-background-color: var(--dac-accent);
+  --rdp-today-color: var(--dac-accent);
+  --rdp-day-height: 32px;
+  --rdp-day-width: 32px;
+  --rdp-day_button-height: 30px;
+  --rdp-day_button-width: 30px;
+  --rdp-day_button-border-radius: 4px;
+  --rdp-day_button-border: none;
+  --rdp-selected-border: none;
+  --rdp-outside-opacity: 0.3;
+  --rdp-nav_button-height: 28px;
+  --rdp-nav_button-width: 28px;
+  --rdp-nav-height: 32px;
+  --rdp-months-gap: 16px;
+  font-size: 13px;
+  color: var(--dac-text-primary);
+}
+
+.dac-calendar-popover .rdp-month_caption {
+  font-size: 13px;
+  font-weight: 600;
+  height: 32px;
+}
+
+.dac-calendar-popover .rdp-weekday {
+  font-size: 11px;
+  color: var(--dac-text-muted);
+  padding: 4px 0;
+}
+
+.dac-calendar-popover .rdp-day_button:hover {
+  background: var(--dac-surface-hover);
+}
+
+.dac-calendar-popover .rdp-selected {
+  font-weight: 500;
+  font-size: inherit;
+}
+
+.dac-calendar-popover .rdp-chevron {
+  fill: var(--dac-text-secondary);
+  width: 14px;
+  height: 14px;
+}
+
+.dac-calendar-popover .rdp-button_previous:hover,
+.dac-calendar-popover .rdp-button_next:hover {
+  background: var(--dac-surface-hover);
+  border-radius: 4px;
 }

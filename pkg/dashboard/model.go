@@ -24,6 +24,9 @@ type Dashboard struct {
 	Refresh     *RefreshConfig   `yaml:"refresh,omitempty" json:"refresh,omitempty"`
 	Filters     []Filter         `yaml:"filters,omitempty" json:"filters,omitempty"`
 	Queries     map[string]Query `yaml:"queries,omitempty" json:"queries,omitempty"`
+	Source      *Source               `yaml:"source,omitempty" json:"source,omitempty"`
+	Metrics     map[string]Metric    `yaml:"metrics,omitempty" json:"metrics,omitempty"`
+	Dimensions  map[string]Dimension `yaml:"dimensions,omitempty" json:"dimensions,omitempty"`
 	Rows        []Row            `yaml:"rows" json:"rows"`
 
 	// FilePath is the source file path, not serialized to JSON for API consumers.
@@ -49,6 +52,40 @@ type FilterOptions struct {
 	Presets    []string `yaml:"presets,omitempty" json:"presets,omitempty"` // date-range: which presets to show
 }
 
+// Source defines the base table for declarative metrics.
+type Source struct {
+	Table      string `yaml:"table" json:"table"`
+	DateColumn string `yaml:"date_column,omitempty" json:"date_column,omitempty"`
+	DateFormat string `yaml:"date_format,omitempty" json:"date_format,omitempty"`
+	Connection string `yaml:"connection,omitempty" json:"connection,omitempty"`
+}
+
+// Metric defines a named scalar value computed from the source table.
+// Use Aggregate for database-computed metrics, or Expression for
+// client-side arithmetic over other metrics.
+type Metric struct {
+	Aggregate  string            `yaml:"aggregate,omitempty" json:"aggregate,omitempty"` // count, count_distinct, sum, avg, min, max
+	Column     string            `yaml:"column,omitempty" json:"column,omitempty"`
+	Filter     map[string]string `yaml:"filter,omitempty" json:"filter,omitempty"`
+	Expression string            `yaml:"expression,omitempty" json:"expression,omitempty"`
+}
+
+// IsExpression returns true if this metric is computed from other metrics.
+func (m *Metric) IsExpression() bool {
+	return m.Expression != ""
+}
+
+// Dimension defines a named grouping column for dimensional queries.
+type Dimension struct {
+	Column string `yaml:"column" json:"column"` // the SQL column expression (e.g. "geo.country")
+	Type   string `yaml:"type,omitempty" json:"type,omitempty"` // "date" for chronological ordering, empty for top-N
+}
+
+// IsDate returns true if this dimension represents a date/time column.
+func (dim *Dimension) IsDate() bool {
+	return dim.Type == "date"
+}
+
 // Query represents a named query definition.
 type Query struct {
 	SQL        string `yaml:"sql,omitempty" json:"sql,omitempty"`
@@ -69,9 +106,10 @@ type Widget struct {
 	Col  int    `yaml:"col,omitempty" json:"col,omitempty"`
 
 	// Query source (pick one)
-	QueryRef string `yaml:"query,omitempty" json:"query,omitempty"` // reference to queries map key
-	SQL      string `yaml:"sql,omitempty" json:"sql,omitempty"`
-	File     string `yaml:"file,omitempty" json:"file,omitempty"`
+	QueryRef  string `yaml:"query,omitempty" json:"query,omitempty"`  // reference to queries map key
+	SQL       string `yaml:"sql,omitempty" json:"sql,omitempty"`
+	File      string `yaml:"file,omitempty" json:"file,omitempty"`
+	MetricRef string `yaml:"metric,omitempty" json:"metric,omitempty"` // reference to metrics map key
 
 	// Connection override for inline queries
 	Connection string `yaml:"connection,omitempty" json:"connection,omitempty"`
@@ -81,6 +119,11 @@ type Widget struct {
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
 	Suffix string `yaml:"suffix,omitempty" json:"suffix,omitempty"`
 	Format string `yaml:"format,omitempty" json:"format,omitempty"`
+
+	// Declarative chart fields (use with source + metrics)
+	Dimension  string   `yaml:"dimension,omitempty" json:"dimension,omitempty"`   // GROUP BY column
+	MetricRefs []string `yaml:"metrics,omitempty" json:"metrics,omitempty"`       // metric names to aggregate
+	Limit      int      `yaml:"limit,omitempty" json:"limit,omitempty"`           // LIMIT for dimensional queries
 
 	// Chart fields
 	Chart   string   `yaml:"chart,omitempty" json:"chart,omitempty"` // line, bar, area, pie, scatter, bubble, combo, histogram, boxplot, funnel, sankey, heatmap, calendar, sparkline, waterfall, xmr, dumbbell
@@ -177,6 +220,25 @@ func ResolveDatePreset(key string) map[string]any {
 	}
 }
 
+// DateRangeFilterName returns the name of the first date-range filter, or "".
+func (d *Dashboard) DateRangeFilterName() string {
+	for _, f := range d.Filters {
+		if f.Type == "date-range" {
+			return f.Name
+		}
+	}
+	return ""
+}
+
+// SourceConnection returns the connection for the source, falling back to
+// the dashboard default.
+func (d *Dashboard) SourceConnection() string {
+	if d.Source != nil && d.Source.Connection != "" {
+		return d.Source.Connection
+	}
+	return d.Connection
+}
+
 // FindByName returns the dashboard with the given name from a slice, or nil.
 func FindByName(dashboards []*Dashboard, name string) *Dashboard {
 	for _, d := range dashboards {
@@ -188,7 +250,12 @@ func FindByName(dashboards []*Dashboard, name string) *Dashboard {
 }
 
 // ResolvedQuery returns the SQL and connection for this widget, resolving named query references.
+// Widgets with MetricRef are handled separately and should not call this method.
 func (w *Widget) ResolvedQuery(dashboard *Dashboard) (sql, connection string, err error) {
+	if w.MetricRef != "" || len(w.MetricRefs) > 0 {
+		return "", "", nil // metric-based widgets are resolved via the metrics system
+	}
+
 	switch {
 	case w.QueryRef != "":
 		q, ok := dashboard.Queries[w.QueryRef]

@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { DayPicker } from "react-day-picker";
+import type { DateRange } from "react-day-picker";
 import type { FilterBarProps } from "../../types/template";
 import type { Filter } from "../../types/dashboard";
 
@@ -32,6 +35,11 @@ interface DatePreset {
 
 function fmt(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function fmtDisplay(d: string): string {
+  const date = parseLocalDate(d);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 const ALL_PRESETS: DatePreset[] = [
@@ -139,7 +147,7 @@ const ALL_PRESETS: DatePreset[] = [
 
 const DEFAULT_PRESET_KEYS = [
   "last_7_days", "last_30_days", "last_90_days",
-  "this_month", "this_quarter", "this_year",
+  "this_month", "this_quarter", "this_year", "all_time",
 ];
 
 function getPresets(filter: Filter): DatePreset[] {
@@ -159,11 +167,11 @@ export function resolvePreset(key: string): { start: string; end: string } | nul
 }
 
 /** Detect which preset matches the current value, if any. */
-function detectPreset(value: { start: string; end: string }, presets: DatePreset[]): string | null {
+function detectPreset(value: { start: string; end: string }, presets: DatePreset[]): DatePreset | null {
   for (const p of presets) {
     const resolved = p.resolve();
     if (resolved.start === value.start && resolved.end === value.end) {
-      return p.key;
+      return p;
     }
   }
   return null;
@@ -225,6 +233,11 @@ function FilterControl({
   }
 }
 
+function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function DateRangeFilter({
   filter,
   value,
@@ -238,72 +251,175 @@ function DateRangeFilter({
 }) {
   const presets = getPresets(filter);
   const dateValue = value as { start: string; end: string } | undefined;
-
   const activePreset = dateValue ? detectPreset(dateValue, presets) : null;
-  const [showCustom, setShowCustom] = useState(
-    // Show custom inputs if the current value doesn't match any preset
-    dateValue != null && activePreset === null,
-  );
 
-  const handlePresetChange = (key: string) => {
-    if (key === "__custom__") {
-      setShowCustom(true);
-      return;
+  const [open, setOpen] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
+
+  const updatePosition = useCallback(() => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPopoverPos({ top: rect.bottom + 4, left: rect.left });
     }
-    setShowCustom(false);
-    const preset = ALL_PRESETS.find((p) => p.key === key);
-    if (preset) {
-      onChange(preset.resolve());
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open) updatePosition();
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+        setShowCalendar(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, updatePosition]);
+
+  const handlePresetClick = (preset: DatePreset) => {
+    onChange(preset.resolve());
+    setOpen(false);
+    setShowCalendar(false);
+  };
+
+  const handleRangeSelect = (range: DateRange | undefined) => {
+    if (range?.from) {
+      onChange({
+        start: fmt(range.from),
+        end: range.to ? fmt(range.to) : fmt(range.from),
+      });
+      if (range.to) {
+        setOpen(false);
+        setShowCalendar(false);
+      }
     }
   };
 
-  const handleDateChange = (field: "start" | "end", val: string) => {
-    onChange({ ...dateValue, [field]: val });
-  };
+  // Display label for the trigger button
+  let triggerLabel: string;
+  if (activePreset) {
+    triggerLabel = activePreset.label;
+  } else if (dateValue) {
+    triggerLabel = `${fmtDisplay(dateValue.start)} – ${fmtDisplay(dateValue.end)}`;
+  } else {
+    triggerLabel = "Select dates";
+  }
 
-  const selectValue = showCustom ? "__custom__" : (activePreset ?? "__custom__");
+  const selected: DateRange | undefined = dateValue
+    ? { from: parseLocalDate(dateValue.start), to: parseLocalDate(dateValue.end) }
+    : undefined;
+
+  const defaultMonth = selected?.to
+    ? new Date(selected.to.getFullYear(), selected.to.getMonth() - 1, 1)
+    : new Date();
 
   return (
     <div className="flex flex-col gap-1">
       <label className="text-[10px] font-medium uppercase tracking-wider text-[var(--dac-text-muted)]">
         {label}
       </label>
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <select
-          className={inputClass}
-          value={selectValue}
-          onChange={(e) => handlePresetChange(e.target.value)}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => { setOpen((v) => !v); if (open) setShowCalendar(false); }}
+        className={`${inputClass} cursor-pointer flex items-center gap-1.5`}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0 opacity-50">
+          <path d="M5 1v2M11 1v2M1.5 6h13M2.5 3h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span className="text-[13px] whitespace-nowrap">{triggerLabel}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 opacity-40 ml-auto">
+          <path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          className="dac-calendar-popover"
+          style={{
+            position: "fixed",
+            top: popoverPos.top,
+            left: popoverPos.left,
+            zIndex: 9999,
+          }}
         >
-          {presets.map((p) => (
-            <option key={p.key} value={p.key}>{p.label}</option>
-          ))}
-          <option value="__custom__">Custom range</option>
-        </select>
-
-        {showCustom && (
-          <>
-            <input
-              type="date"
-              className={inputClass}
-              value={dateValue?.start ?? ""}
-              onChange={(e) => handleDateChange("start", e.target.value)}
-            />
-            <span className="text-[10px] text-[var(--dac-text-muted)]">to</span>
-            <input
-              type="date"
-              className={inputClass}
-              value={dateValue?.end ?? ""}
-              onChange={(e) => handleDateChange("end", e.target.value)}
-            />
-          </>
-        )}
-
-        {!showCustom && dateValue && (
-          <span className="text-[11px] text-[var(--dac-text-secondary)]">
-            {dateValue.start} — {dateValue.end}
-          </span>
-        )}
-      </div>
+          {!showCalendar ? (
+            <div className="flex flex-col min-w-[180px]">
+              {presets.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => handlePresetClick(p)}
+                  className={`text-left px-3 py-1.5 text-[13px] rounded-sm transition-colors duration-75 ${
+                    activePreset?.key === p.key
+                      ? "bg-[var(--dac-accent-subtle)] text-[var(--dac-accent)] font-medium"
+                      : "text-[var(--dac-text-primary)] hover:bg-[var(--dac-surface-hover)]"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <div className="border-t border-[var(--dac-border)] mt-1 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCalendar(true)}
+                  className={`w-full text-left px-3 py-1.5 text-[13px] rounded-sm transition-colors duration-75 ${
+                    !activePreset && dateValue
+                      ? "bg-[var(--dac-accent-subtle)] text-[var(--dac-accent)] font-medium"
+                      : "text-[var(--dac-text-secondary)] hover:bg-[var(--dac-surface-hover)]"
+                  }`}
+                >
+                  Custom range...
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2 px-1 pb-2 mb-2 border-b border-[var(--dac-border)]">
+                <button
+                  type="button"
+                  onClick={() => setShowCalendar(false)}
+                  className="text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] transition-colors p-0.5"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M8.5 3L4.5 7L8.5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <span className="text-[12px] font-medium text-[var(--dac-text-secondary)]">
+                  {dateValue
+                    ? `${fmtDisplay(dateValue.start)} – ${fmtDisplay(dateValue.end)}`
+                    : "Select a range"}
+                </span>
+              </div>
+              <DayPicker
+                mode="range"
+                selected={selected}
+                onSelect={handleRangeSelect}
+                defaultMonth={defaultMonth}
+                numberOfMonths={2}
+                showOutsideDays
+              />
+            </div>
+          )}
+        </div>,
+        document.querySelector(".dac-root") ?? document.body,
+      )}
     </div>
   );
 }
