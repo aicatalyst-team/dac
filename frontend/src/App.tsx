@@ -1,12 +1,15 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Navigate, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { TemplateProvider } from "./themes/TemplateProvider";
 import { resolveTemplate } from "./themes/registry";
-import { fetchConfig } from "./api/client";
+import { fetchConfig, getStaticPayload } from "./api/client";
 import { DashboardList } from "./components/DashboardList";
 import { DashboardView } from "./components/DashboardView";
 import { Admin } from "./components/Admin";
 import { useLiveReload } from "./hooks/useLiveReload";
+
+const staticPayload = getStaticPayload();
+const Router = staticPayload ? HashRouter : BrowserRouter;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,9 +23,14 @@ const queryClient = new QueryClient({
 function DashboardContent() {
   useLiveReload();
 
+  // In static mode, skip the list and go straight to the baked dashboard.
+  const home = staticPayload
+    ? <Navigate to={`/d/${encodeURIComponent(staticPayload.dashboard.name)}`} replace />
+    : <DashboardList />;
+
   return (
     <Routes>
-      <Route path="/" element={<DashboardList />} />
+      <Route path="/" element={home} />
       <Route path="/d/:name" element={<DashboardView />} />
     </Routes>
   );
@@ -50,12 +58,12 @@ function AppWithTemplate() {
 
 function AppRouter() {
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route path="/admin" element={<Admin />} />
         <Route path="/*" element={<AppWithTemplate />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
 

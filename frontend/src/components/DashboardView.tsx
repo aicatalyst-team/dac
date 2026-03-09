@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useDashboard } from "../hooks/useDashboard";
 import { useDashboardData } from "../hooks/useDashboardData";
@@ -25,11 +25,25 @@ function buildDefaultFilters(dashboard: { filters?: Filter[] }): Record<string, 
   return defaults;
 }
 
+const isStaticMode = !!(window as any).__DAC_STATIC__;
+
 export function DashboardView() {
   const { name } = useParams<{ name: string }>();
   const { data: dashboard, isLoading: dashLoading, error: dashError } = useDashboard(name || "");
   const [agentOpen, setAgentOpen] = useState(false);
   const [yamlOpen, setYamlOpen] = useState(false);
+  const [agentWidth, setAgentWidth] = useState(380);
+  const [yamlWidth, setYamlWidth] = useState(420);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleAgentResize = useCallback((delta: number) => {
+    setAgentWidth((w) => Math.max(280, Math.min(600, w + delta)));
+  }, []);
+  const handleYamlResize = useCallback((delta: number) => {
+    setYamlWidth((w) => Math.max(280, Math.min(800, w + delta)));
+  }, []);
+  const onResizeStart = useCallback(() => setIsResizing(true), []);
+  const onResizeEnd = useCallback(() => setIsResizing(false), []);
 
   const defaultFilters = useMemo(
     () => dashboard ? buildDefaultFilters(dashboard) : null,
@@ -85,49 +99,64 @@ export function DashboardView() {
     />
   ) : null;
 
-  const headerActions = (
+  const headerActions = isStaticMode ? null : (
     <div className="flex items-center gap-1.5">
       <button
+        onClick={() => setAgentOpen(!agentOpen)}
+        className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-all duration-100 ${
+          agentOpen
+            ? "border-[var(--dac-accent)] text-[var(--dac-accent)] hover:bg-[color-mix(in_srgb,var(--dac-accent)_8%,transparent)]"
+            : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)] hover:bg-[var(--dac-surface-hover)]"
+        }`}
+        title={agentOpen ? "Save changes" : "Edit with AI"}
+      >
+        {agentOpen ? (
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12.5 2H3.5C2.67 2 2 2.67 2 3.5V12.5C2 13.33 2.67 14 3.5 14H12.5C13.33 14 14 13.33 14 12.5V5L11 2Z" />
+            <path d="M11 2V5H14" />
+            <path d="M5 10H11" />
+            <path d="M5 12H8" />
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z" />
+          </svg>
+        )}
+        {agentOpen ? "Save" : "Edit"}
+      </button>
+      <button
         onClick={() => setYamlOpen(!yamlOpen)}
-        className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-colors duration-100 ${
+        className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-all duration-100 ${
           yamlOpen
-            ? "border-[var(--dac-accent)] text-[var(--dac-accent)]"
-            : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)]"
+            ? "border-[var(--dac-accent)] text-[var(--dac-accent)] hover:bg-[color-mix(in_srgb,var(--dac-accent)_8%,transparent)]"
+            : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)] hover:bg-[var(--dac-surface-hover)]"
         }`}
         title="View YAML"
       >
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 2H3C2.45 2 2 2.45 2 3V13C2 13.55 2.45 14 3 14H13C13.55 14 14 13.55 14 13V11" />
-          <path d="M7 9L14 2" />
-          <path d="M10 2H14V6" />
+          <path d="M5.5 4L2 8L5.5 12" />
+          <path d="M10.5 4L14 8L10.5 12" />
         </svg>
-        YAML
-      </button>
-      <button
-        onClick={() => setAgentOpen(!agentOpen)}
-        className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-colors duration-100 ${
-          agentOpen
-            ? "border-[var(--dac-accent)] text-[var(--dac-accent)]"
-            : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)]"
-        }`}
-        title="Edit with AI"
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z" />
-        </svg>
-        Edit
       </button>
     </div>
   );
 
+  const gridColumns = `${agentOpen ? agentWidth : 0}px 1fr ${yamlOpen ? yamlWidth : 0}px`;
+
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div
+      className={`dac-layout h-screen overflow-hidden ${isResizing ? "dac-layout-resizing" : ""}`}
+      style={{ gridTemplateColumns: gridColumns }}
+    >
       <AgentChat
         dashboardName={name || ""}
         isOpen={agentOpen}
         onClose={() => setAgentOpen(false)}
+        onResize={handleAgentResize}
+        onResizeStart={onResizeStart}
+        onResizeEnd={onResizeEnd}
       />
-      <div className="flex-1 overflow-y-auto">
+      <div className="overflow-y-auto min-w-0">
         <DashboardLayout dashboard={dashboard} filterBar={filterBar} headerActions={headerActions}>
           {dashboard.rows.map((row, rowIdx) => (
             <div
@@ -158,6 +187,9 @@ export function DashboardView() {
         dashboardName={name || ""}
         isOpen={yamlOpen}
         onClose={() => setYamlOpen(false)}
+        onResize={handleYamlResize}
+        onResizeStart={onResizeStart}
+        onResizeEnd={onResizeEnd}
       />
     </div>
   );

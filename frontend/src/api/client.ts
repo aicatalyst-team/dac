@@ -3,6 +3,22 @@ import type { Theme } from "../types/theme";
 
 const BASE = "/api/v1";
 
+// --- Static payload detection ---
+
+export interface StaticPayload {
+  config: ServerConfig;
+  dashboard: Dashboard;
+  dashboards: DashboardSummary[];
+  widgetData: Record<string, WidgetData>;
+  filters: Record<string, unknown>;
+}
+
+export function getStaticPayload(): StaticPayload | undefined {
+  return (window as any).__DAC_STATIC__;
+}
+
+// --- API functions ---
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -19,15 +35,21 @@ export interface ServerConfig {
 }
 
 export async function fetchConfig(): Promise<ServerConfig> {
+  const sp = getStaticPayload();
+  if (sp) return sp.config;
   return fetchJSON<ServerConfig>(`${BASE}/config`);
 }
 
 export async function listDashboards(): Promise<DashboardSummary[]> {
+  const sp = getStaticPayload();
+  if (sp) return sp.dashboards;
   const data = await fetchJSON<{ dashboards: DashboardSummary[] }>(`${BASE}/dashboards`);
   return data.dashboards;
 }
 
 export async function getDashboard(name: string): Promise<Dashboard> {
+  const sp = getStaticPayload();
+  if (sp) return sp.dashboard;
   return fetchJSON<Dashboard>(`${BASE}/dashboards/${encodeURIComponent(name)}`);
 }
 
@@ -44,6 +66,8 @@ export async function fetchDashboardData(
   name: string,
   filters?: Record<string, unknown>,
 ): Promise<Record<string, WidgetData>> {
+  const sp = getStaticPayload();
+  if (sp) return sp.widgetData;
   const data = await fetchJSON<BatchDataResponse>(
     `${BASE}/dashboards/${encodeURIComponent(name)}/data`,
     {
@@ -66,6 +90,16 @@ export function streamDashboardData(
   onDone: () => void,
   onError: (err: Error) => void,
 ): () => void {
+  // In static mode, synchronously emit baked data.
+  const sp = getStaticPayload();
+  if (sp) {
+    for (const [id, data] of Object.entries(sp.widgetData)) {
+      onWidget(id, data);
+    }
+    onDone();
+    return () => {};
+  }
+
   const controller = new AbortController();
 
   (async () => {

@@ -14,10 +14,14 @@ import (
 	tmpl "github.com/bruin-data/dac/pkg/template"
 )
 
-type widgetJob struct {
-	id         string
-	sql        string
-	connection string
+// WidgetJob represents a single SQL query to execute for a dashboard widget.
+type WidgetJob struct {
+	ID         string
+	SQL        string
+	Connection string
+	// MetricFanout is set on the merged metrics job: maps widget ID -> metric name.
+	// When set, the single query result is fanned out to multiple widget results.
+	MetricFanout map[string]string
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -32,13 +36,30 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-type dashboardSummary struct {
+// DashboardSummary is a lightweight representation of a dashboard for listing.
+type DashboardSummary struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Connection  string `json:"connection,omitempty"`
 	WidgetCount int    `json:"widget_count"`
 	FilterCount int    `json:"filter_count"`
 	RowCount    int    `json:"row_count"`
+}
+
+// MakeDashboardSummary creates a DashboardSummary from a Dashboard.
+func MakeDashboardSummary(d *dashboard.Dashboard) DashboardSummary {
+	widgetCount := 0
+	for _, row := range d.Rows {
+		widgetCount += len(row.Widgets)
+	}
+	return DashboardSummary{
+		Name:        d.Name,
+		Description: d.Description,
+		Connection:  d.Connection,
+		WidgetCount: widgetCount,
+		FilterCount: len(d.Filters),
+		RowCount:    len(d.Rows),
+	}
 }
 
 func (s *Server) handleListDashboards(w http.ResponseWriter, r *http.Request) {
@@ -48,20 +69,9 @@ func (s *Server) handleListDashboards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summaries := make([]dashboardSummary, 0, len(dashboards))
+	summaries := make([]DashboardSummary, 0, len(dashboards))
 	for _, d := range dashboards {
-		widgetCount := 0
-		for _, row := range d.Rows {
-			widgetCount += len(row.Widgets)
-		}
-		summaries = append(summaries, dashboardSummary{
-			Name:        d.Name,
-			Description: d.Description,
-			Connection:  d.Connection,
-			WidgetCount: widgetCount,
-			FilterCount: len(d.Filters),
-			RowCount:    len(d.Rows),
-		})
+		summaries = append(summaries, MakeDashboardSummary(d))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"dashboards": summaries})
 }
@@ -112,7 +122,8 @@ type batchQueryRequest struct {
 	Filters map[string]any `json:"filters"`
 }
 
-type widgetQueryResult struct {
+// WidgetQueryResult holds the result of executing a widget's SQL query.
+type WidgetQueryResult struct {
 	Columns []struct {
 		Name string `json:"name"`
 		Type string `json:"type,omitempty"`
@@ -159,27 +170,31 @@ func (s *Server) handleBatchQuery(w http.ResponseWriter, r *http.Request) {
 		filters[k] = v
 	}
 
-	jobs, err := s.resolveWidgetJobs(d, filters)
+	jobs, err := ResolveWidgetJobs(d, filters)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Execute all widget queries concurrently with a concurrency limit.
-	results := make(map[string]*widgetQueryResult)
+	results := make(map[string]*WidgetQueryResult)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
 	sem := make(chan struct{}, 8)
 	for _, j := range jobs {
 		wg.Add(1)
-		go func(j widgetJob) {
+		go func(j WidgetJob) {
 			defer wg.Done()
 			sem <- struct{}{}
-			wr := executeWidgetQuery(r.Context(), s.backend, j)
+			wr := ExecuteWidgetQuery(r.Context(), s.backend, j)
 			<-sem
 			mu.Lock()
-			results[j.id] = wr
+			if j.MetricFanout != nil {
+				FanoutMetricResults(results, wr, j, d)
+			} else {
+				results[j.ID] = wr
+			}
 			mu.Unlock()
 		}(j)
 	}
@@ -237,9 +252,13 @@ func (s *Server) handleGetTheme(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
-// resolveWidgetJobs builds the list of SQL jobs for all data-bearing widgets
+// ResolveWidgetJobs builds the list of SQL jobs for all data-bearing widgets
 // in a dashboard, including declarative metric and dimensional widgets.
-func (s *Server) resolveWidgetJobs(d *dashboard.Dashboard, filters map[string]any) ([]widgetJob, error) {
+//
+// Metric-ref widgets are merged into a single query to avoid redundant table
+// scans. The merged result is then split into per-widget results via
+// metricsJobGroup.
+func ResolveWidgetJobs(d *dashboard.Dashboard, filters map[string]any) ([]WidgetJob, error) {
 	// Extract date filter values for declarative SQL generation.
 	var dateFilter map[string]any
 	if dfName := d.DateRangeFilterName(); dfName != "" {
@@ -250,7 +269,14 @@ func (s *Server) resolveWidgetJobs(d *dashboard.Dashboard, filters map[string]an
 		}
 	}
 
-	var jobs []widgetJob
+	// First pass: collect metric-ref widgets to merge into one query.
+	type metricWidget struct {
+		id        string
+		metricRef string
+	}
+	var metricWidgets []metricWidget
+
+	var jobs []WidgetJob
 	for i, row := range d.Rows {
 		for j, widget := range row.Widgets {
 			if widget.Type == dashboard.WidgetTypeText || widget.Type == dashboard.WidgetTypeDivider || widget.Type == dashboard.WidgetTypeImage {
@@ -261,21 +287,21 @@ func (s *Server) resolveWidgetJobs(d *dashboard.Dashboard, filters map[string]an
 			var err error
 
 			switch {
-			case widget.MetricRef != "" && d.Source != nil:
-				// Declarative metric widget: generate scalar query.
-				sql, err = generateSingleMetricSQL(d, widget.MetricRef, dateFilter)
-				if err != nil {
-					return nil, fmt.Errorf("widget %q: %w", widget.Name, err)
-				}
-				conn = d.SourceConnection()
+			case widget.MetricRef != "" && d.SemanticSource() != nil:
+				// Collect for merging — don't create individual jobs yet.
+				metricWidgets = append(metricWidgets, metricWidget{
+					id:        WidgetID(i, j),
+					metricRef: widget.MetricRef,
+				})
+				continue
 
-			case len(widget.MetricRefs) > 0 && widget.Dimension != "" && d.Source != nil:
-				// Declarative dimensional chart widget.
-				dim, ok := d.Dimensions[widget.Dimension]
+			case len(widget.MetricRefs) > 0 && widget.Dimension != "" && d.SemanticSource() != nil:
+				dims := d.SemanticDimensions()
+				dim, ok := dims[widget.Dimension]
 				if !ok {
 					return nil, fmt.Errorf("widget %q: dimension %q not found", widget.Name, widget.Dimension)
 				}
-				sql, err = dashboard.GenerateDimensionalSQL(d.Source, d.Metrics, widget.MetricRefs, &dim, dateFilter, widget.Limit)
+				sql, err = dashboard.GenerateDimensionalSQL(d.SemanticSource(), d.SemanticMetrics(), widget.MetricRefs, &dim, dateFilter, widget.Limit)
 				if err != nil {
 					return nil, fmt.Errorf("widget %q: %w", widget.Name, err)
 				}
@@ -291,54 +317,59 @@ func (s *Server) resolveWidgetJobs(d *dashboard.Dashboard, filters map[string]an
 				}
 			}
 
-			// Render Jinja templates (e.g. source table name with conditionals).
 			if len(filters) > 0 {
 				sql, err = tmpl.Render(sql, filters)
 				if err != nil {
 					return nil, fmt.Errorf("template error: %w", err)
 				}
 			}
-			jobs = append(jobs, widgetJob{id: widgetID(i, j), sql: sql, connection: conn})
+			jobs = append(jobs, WidgetJob{ID: WidgetID(i, j), SQL: sql, Connection: conn})
 		}
 	}
+
+	// Merge all metric-ref widgets into a single query.
+	if len(metricWidgets) > 0 && d.SemanticSource() != nil {
+		sql, err := dashboard.GenerateMetricsSQL(d.SemanticSource(), d.SemanticMetrics(), dateFilter)
+		if err != nil {
+			return nil, fmt.Errorf("merged metrics query: %w", err)
+		}
+		if len(filters) > 0 {
+			sql, err = tmpl.Render(sql, filters)
+			if err != nil {
+				return nil, fmt.Errorf("template error: %w", err)
+			}
+		}
+
+		// Build mapping from widget ID to its metric ref / expression.
+		widgetMetrics := make(map[string]string, len(metricWidgets))
+		for _, mw := range metricWidgets {
+			widgetMetrics[mw.id] = mw.metricRef
+		}
+
+		jobs = append(jobs, WidgetJob{
+			ID:           MetricsJobID,
+			SQL:          sql,
+			Connection:   d.SourceConnection(),
+			MetricFanout: widgetMetrics,
+		})
+	}
+
 	return jobs, nil
 }
 
-// generateSingleMetricSQL builds a scalar SQL query for a single metric widget.
-// Expression metrics are inlined as SQL so the database evaluates them directly.
-func generateSingleMetricSQL(d *dashboard.Dashboard, metricName string, dateFilter map[string]any) (string, error) {
-	m, ok := d.Metrics[metricName]
-	if !ok {
-		return "", fmt.Errorf("metric %q not found", metricName)
-	}
+// MetricsJobID is the sentinel job ID used for the merged metrics query.
+const MetricsJobID = "__metrics__"
 
-	// For expression metrics, use GenerateDimensionalSQL machinery but without a GROUP BY.
-	// Build a simple SELECT <expr> as value FROM <source> WHERE <date>.
-	if m.IsExpression() {
-		// Generate the merged metrics query and wrap the expression.
-		metricsSQL, err := dashboard.GenerateMetricsSQL(d.Source, d.Metrics, dateFilter)
-		if err != nil {
-			return "", err
-		}
-		// The merged query returns all aggregate metrics as columns. Wrap it
-		// in a subquery and compute the expression.
-		return fmt.Sprintf("SELECT (%s) as value FROM (%s)", m.Expression, metricsSQL), nil
-	}
-
-	// Direct aggregate metric: generate a single-column query.
-	onlyThis := map[string]dashboard.Metric{metricName: m}
-	return dashboard.GenerateMetricsSQL(d.Source, onlyThis, dateFilter)
-}
-
-func executeWidgetQuery(ctx context.Context, backend query.Backend, j widgetJob) *widgetQueryResult {
-	qr, err := backend.Execute(ctx, j.connection, j.sql)
+// ExecuteWidgetQuery runs a single widget SQL query against the given backend.
+func ExecuteWidgetQuery(ctx context.Context, backend query.Backend, j WidgetJob) *WidgetQueryResult {
+	qr, err := backend.Execute(ctx, j.Connection, j.SQL)
 	if err != nil {
-		return &widgetQueryResult{Query: j.sql, Error: err.Error()}
+		return &WidgetQueryResult{Query: j.SQL, Error: err.Error()}
 	}
 
-	wr := &widgetQueryResult{
+	wr := &WidgetQueryResult{
 		Rows:  make([][]any, len(qr.Rows)),
-		Query: j.sql,
+		Query: j.SQL,
 	}
 	for _, col := range qr.Columns {
 		wr.Columns = append(wr.Columns, struct {
@@ -350,6 +381,11 @@ func executeWidgetQuery(ctx context.Context, backend query.Backend, j widgetJob)
 		wr.Rows[i] = row
 	}
 	return wr
+}
+
+// WidgetID returns the canonical widget identifier for a given row and widget index.
+func WidgetID(rowIdx, widgetIdx int) string {
+	return fmt.Sprintf("r%d-w%d", rowIdx, widgetIdx)
 }
 
 // handleStreamQuery is the streaming variant of handleBatchQuery.
@@ -396,7 +432,7 @@ func (s *Server) handleStreamQuery(w http.ResponseWriter, r *http.Request) {
 		filters[k] = v
 	}
 
-	jobs, err := s.resolveWidgetJobs(d, filters)
+	jobs, err := ResolveWidgetJobs(d, filters)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -412,20 +448,35 @@ func (s *Server) handleStreamQuery(w http.ResponseWriter, r *http.Request) {
 	// Results channel — each goroutine sends its result here.
 	type streamResult struct {
 		ID   string             `json:"id"`
-		Data *widgetQueryResult `json:"data"`
+		Data *WidgetQueryResult `json:"data"`
 	}
-	ch := make(chan streamResult, len(jobs))
+	// Buffer size accounts for metric fanout producing multiple results per job.
+	bufSize := len(jobs)
+	for _, j := range jobs {
+		if j.MetricFanout != nil {
+			bufSize += len(j.MetricFanout) - 1
+		}
+	}
+	ch := make(chan streamResult, bufSize)
 
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
 	for _, j := range jobs {
 		wg.Add(1)
-		go func(j widgetJob) {
+		go func(j WidgetJob) {
 			defer wg.Done()
 			sem <- struct{}{}
-			wr := executeWidgetQuery(r.Context(), s.backend, j)
+			wr := ExecuteWidgetQuery(r.Context(), s.backend, j)
 			<-sem
-			ch <- streamResult{ID: j.id, Data: wr}
+			if j.MetricFanout != nil {
+				// Fan out the merged metrics result to individual widget results.
+				for wid, metricRef := range j.MetricFanout {
+					wr := FanoutSingleMetric(wr, metricRef, j.SQL, d)
+					ch <- streamResult{ID: wid, Data: wr}
+				}
+			} else {
+				ch <- streamResult{ID: j.ID, Data: wr}
+			}
 		}(j)
 	}
 
@@ -444,6 +495,94 @@ func (s *Server) handleStreamQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func widgetID(rowIdx, widgetIdx int) string {
-	return fmt.Sprintf("r%d-w%d", rowIdx, widgetIdx)
+// FanoutMetricResults splits a merged metrics query result into individual
+// widget results and adds them to the results map.
+func FanoutMetricResults(results map[string]*WidgetQueryResult, merged *WidgetQueryResult, j WidgetJob, d *dashboard.Dashboard) {
+	for wid, metricRef := range j.MetricFanout {
+		results[wid] = FanoutSingleMetric(merged, metricRef, j.SQL, d)
+	}
+}
+
+// FanoutSingleMetric extracts a single metric's value from a merged query
+// result. For aggregate metrics, it picks the column by name. For expression
+// metrics, it evaluates the expression client-side from the aggregate values.
+func FanoutSingleMetric(merged *WidgetQueryResult, metricRef string, sql string, d *dashboard.Dashboard) *WidgetQueryResult {
+	if merged.Error != "" {
+		return &WidgetQueryResult{Query: sql, Error: merged.Error}
+	}
+
+	m, ok := d.SemanticMetrics()[metricRef]
+	if !ok {
+		return &WidgetQueryResult{Query: sql, Error: fmt.Sprintf("metric %q not found", metricRef)}
+	}
+
+	if m.IsExpression() {
+		// Evaluate expression from aggregate values in the merged result.
+		values := make(map[string]float64)
+		if len(merged.Rows) > 0 {
+			for ci, col := range merged.Columns {
+				if ci < len(merged.Rows[0]) {
+					if v, ok := toFloat64(merged.Rows[0][ci]); ok {
+						values[col.Name] = v
+					}
+				}
+			}
+		}
+		result, err := dashboard.EvaluateExpression(m.Expression, values)
+		if err != nil {
+			return &WidgetQueryResult{Query: sql, Error: err.Error()}
+		}
+		return &WidgetQueryResult{
+			Columns: []struct {
+				Name string `json:"name"`
+				Type string `json:"type,omitempty"`
+			}{{Name: metricRef}},
+			Rows:  [][]any{{result}},
+			Query: sql,
+		}
+	}
+
+	// Find the column index for this metric.
+	colIdx := -1
+	for i, col := range merged.Columns {
+		if col.Name == metricRef {
+			colIdx = i
+			break
+		}
+	}
+	if colIdx < 0 {
+		return &WidgetQueryResult{Query: sql, Error: fmt.Sprintf("column %q not found in merged result", metricRef)}
+	}
+
+	// Extract just this column.
+	var value any
+	if len(merged.Rows) > 0 && colIdx < len(merged.Rows[0]) {
+		value = merged.Rows[0][colIdx]
+	}
+	return &WidgetQueryResult{
+		Columns: []struct {
+			Name string `json:"name"`
+			Type string `json:"type,omitempty"`
+		}{{Name: metricRef, Type: merged.Columns[colIdx].Type}},
+		Rows:  [][]any{{value}},
+		Query: sql,
+	}
+}
+
+func toFloat64(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
 }

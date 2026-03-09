@@ -5,6 +5,9 @@ export function useLiveReload() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    // No server to connect to in static mode.
+    if ((window as any).__DAC_STATIC__) return;
+
     const es = new EventSource("/api/v1/events");
 
     es.onmessage = (event) => {
