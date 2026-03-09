@@ -13,8 +13,9 @@ func TestLoadDir_LoadsAllDashboards(t *testing.T) {
 	dashboards, err := LoadDir("../../testdata/dashboards")
 	assertNoErr(t, err)
 
-	if len(dashboards) != 3 {
-		t.Fatalf("expected 3 dashboards, got %d", len(dashboards))
+	// 3 YAML + 1 TSX = 4
+	if len(dashboards) != 4 {
+		t.Fatalf("expected 4 dashboards, got %d", len(dashboards))
 	}
 }
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -44,11 +45,32 @@ type Server struct {
 }
 
 type dashboardLoader struct {
-	dir string
+	dir     string
+	backend query.Backend
 }
 
 func (l *dashboardLoader) Load() ([]*dashboard.Dashboard, error) {
-	return dashboard.LoadDir(l.dir)
+	var opts []dashboard.TSXOption
+	if l.backend != nil {
+		opts = append(opts, dashboard.WithQueryFunc(func(connection, sql string) (map[string]interface{}, error) {
+			result, err := l.backend.Execute(context.Background(), connection, sql)
+			if err != nil {
+				return nil, err
+			}
+			cols := make([]map[string]interface{}, len(result.Columns))
+			for i, c := range result.Columns {
+				cols[i] = map[string]interface{}{"name": c.Name}
+				if c.Type != "" {
+					cols[i]["type"] = c.Type
+				}
+			}
+			return map[string]interface{}{
+				"columns": cols,
+				"rows":    result.Rows,
+			}, nil
+		}))
+	}
+	return dashboard.LoadDir(l.dir, opts...)
 }
 
 // New creates a new server instance.
@@ -83,7 +105,7 @@ func New(cfg Config) (*Server, error) {
 		config:      cfg,
 		backend:     cachedBackend,
 		themes:      themes,
-		loader:      &dashboardLoader{dir: cfg.DashboardDir},
+		loader:      &dashboardLoader{dir: cfg.DashboardDir, backend: cachedBackend},
 		codex:       codex.New(filepath.Join(cfg.DashboardDir, ".sessions")),
 		mux:         http.NewServeMux(),
 		sessionDash: make(map[string]string),

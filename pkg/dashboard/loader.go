@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LoadDir discovers and loads all *.yml dashboard files in the given directory.
-func LoadDir(dir string) ([]*Dashboard, error) {
+// LoadDir discovers and loads all dashboard files (*.yml, *.yaml, *.dashboard.tsx) in the given directory.
+func LoadDir(dir string, opts ...TSXOption) ([]*Dashboard, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("reading dashboard directory: %w", err)
@@ -21,19 +21,28 @@ func LoadDir(dir string) ([]*Dashboard, error) {
 		if entry.IsDir() {
 			continue
 		}
-		if !isYAMLFile(entry.Name()) {
-			continue
-		}
 		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 
 		path := filepath.Join(dir, entry.Name())
-		d, err := LoadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("loading %s: %w", entry.Name(), err)
+		name := entry.Name()
+
+		switch {
+		case isYAMLFile(name):
+			d, err := LoadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("loading %s: %w", name, err)
+			}
+			dashboards = append(dashboards, d)
+
+		case isTSXFile(name):
+			d, err := LoadTSXFile(path, opts...)
+			if err != nil {
+				return nil, fmt.Errorf("loading %s: %w", name, err)
+			}
+			dashboards = append(dashboards, d)
 		}
-		dashboards = append(dashboards, d)
 	}
 
 	return dashboards, nil
