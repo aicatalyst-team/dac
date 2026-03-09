@@ -1,12 +1,18 @@
 ---
 name: create-dashboard
-description: Create dac dashboards by writing YAML definition files and SQL queries. Use when the user wants to create, modify, or understand dashboard YAML files, widget configuration, filters, query templating, or CLI usage.
+description: Create dac dashboards by writing YAML or TSX definition files. Use when the user wants to create, modify, or understand dashboard files, widget configuration, filters, query templating, or CLI usage. TSX dashboards enable loops, variables, custom components, and data-driven layouts impossible in YAML.
 argument-hint: "[description of the dashboard to create]"
 ---
 
 # Create Dashboard
 
-Create dac dashboards by writing YAML files and SQL queries. This skill covers the full dashboard YAML schema, widget types, filters, query templating, and project setup.
+Create dac dashboards by writing YAML or TSX files. This skill covers both formats, widget types, filters, query templating, and project setup.
+
+**When to use YAML vs TSX:**
+- **YAML** — straightforward dashboards with static layouts. Simpler syntax, no programming needed.
+- **TSX** — dashboards that need loops, variables, custom reusable components, conditional logic, or data-driven layouts that adapt to the database contents at load time.
+
+Both formats produce identical Dashboard structs and coexist in the same directory.
 
 When invoked, use `$ARGUMENTS` as the description of what dashboard to create.
 
@@ -20,13 +26,19 @@ my-project/
   dashboards/
     my-dashboard.yml            # Any *.yml file = a dashboard
     another.yml
+    explorer.dashboard.tsx      # Any *.dashboard.tsx file = a TSX dashboard
+    dynamic-report.dashboard.tsx
+    lib/
+      kpi.tsx                   # Shared TSX helpers (not auto-discovered)
     queries/
-      my_query.sql              # Shared SQL files (referenced from YAML)
+      my_query.sql              # Shared SQL files (referenced from YAML or TSX)
   themes/
     corporate.yml               # Optional custom themes (token overrides)
 ```
 
-- Any `*.yml` file in the dashboard directory is auto-discovered as a dashboard.
+- Any `*.yml`/`*.yaml` file in the dashboard directory is auto-discovered as a YAML dashboard.
+- Any `*.dashboard.tsx` file is auto-discovered as a TSX dashboard.
+- Files in `lib/` or without the `.dashboard.tsx` suffix are NOT auto-discovered (use `require()` to import them).
 - Files starting with `.` are ignored (e.g. `.bruin.yml`).
 - SQL files can live in `queries/` or any subdirectory — referenced by relative path.
 
@@ -694,6 +706,265 @@ WHERE created_at >= '{{ filters.date_range.start }}'
 ```sql
 {{ filters.region }}
 {{ filters.search }}
+```
+
+---
+
+## TSX Dashboards (Code-Based)
+
+TSX dashboards use JSX syntax that maps directly to the same widget types as YAML. The file is transpiled with esbuild and executed with goja at load time.
+
+### Basic TSX Dashboard
+
+```tsx
+// sales.dashboard.tsx
+export default (
+  <Dashboard name="Sales Analytics" connection="local_duckdb">
+    <Filter name="region" type="select" default="All"
+      options={{ values: ["All", "NA", "EU", "APAC"] }} />
+    <Filter name="date_range" type="date-range" default="last_30_days" />
+
+    <Row>
+      <Metric name="Revenue" col={3}
+        sql="SELECT SUM(amount) as value FROM sales"
+        column="value" prefix="$" format="number" />
+      <Metric name="Orders" col={3}
+        sql="SELECT COUNT(*) as value FROM orders"
+        column="value" format="number" />
+    </Row>
+
+    <Row>
+      <Chart name="Trend" chart="area" col={8}
+        sql="SELECT month, revenue FROM monthly ORDER BY 1"
+        x="month" y={["revenue"]} />
+      <Chart name="By Region" chart="pie" col={4}
+        sql="SELECT region, SUM(amount) as total FROM sales GROUP BY 1"
+        label="region" value="total" />
+    </Row>
+
+    <Row>
+      <Table name="Recent Orders" col={12}
+        sql="SELECT * FROM orders ORDER BY created_at DESC LIMIT 20" />
+    </Row>
+  </Dashboard>
+)
+```
+
+### JSX Tag Reference
+
+Every YAML widget type has a corresponding JSX tag. Props map directly to YAML fields:
+
+| JSX Tag | YAML `type:` | Props |
+|---------|-------------|-------|
+| `<Dashboard>` | (root) | `name`, `connection`, `description`, `theme`, `refresh` |
+| `<Row>` | (row) | `height` |
+| `<Filter>` | (filter) | `name`, `type`, `default`, `multiple`, `options` |
+| `<Query>` | (named query) | `name`, `sql`, `file`, `connection` |
+| `<Semantic>` | (semantic layer) | `source`, `metrics`, `dimensions` |
+| `<Metric>` | `metric` | `name`, `col`, `sql`, `query`, `column`, `prefix`, `suffix`, `format`, `metric` |
+| `<Chart>` | `chart` | `name`, `col`, `chart`, `sql`, `x`, `y`, `label`, `value`, `stacked`, `dimension`, `metrics`, `limit`, etc. |
+| `<Table>` | `table` | `name`, `col`, `sql`, `query`, `columns` |
+| `<Text>` | `text` | `name`, `col`, `content` |
+| `<Divider>` | `divider` | `name`, `col` |
+| `<Image>` | `image` | `name`, `col`, `src`, `alt` |
+
+### Custom Components
+
+Define reusable widget patterns as functions — impossible in YAML:
+
+```tsx
+function KPI({ name, sql, prefix, ...rest }) {
+  return <Metric name={name} sql={sql} column="value" format="number" prefix={prefix} {...rest} />
+}
+
+export default (
+  <Dashboard name="Sales" connection="duckdb">
+    <Row>
+      <KPI name="Revenue" sql="SELECT SUM(amount) as value FROM sales" prefix="$" col={4} />
+      <KPI name="Orders" sql="SELECT COUNT(*) as value FROM orders" col={4} />
+    </Row>
+  </Dashboard>
+)
+```
+
+### Loops and Variables
+
+Generate widgets programmatically — impossible in YAML:
+
+```tsx
+const regions = ["NA", "EU", "APAC"]
+
+export default (
+  <Dashboard name="Sales" connection="duckdb">
+    <Row>
+      {regions.map(r =>
+        <Metric name={`${r} Revenue`} col={4} prefix="$"
+          sql={`SELECT SUM(amount) as value FROM sales WHERE region = '${r}'`}
+          column="value" format="number" />
+      )}
+    </Row>
+  </Dashboard>
+)
+```
+
+### Data-Driven Dashboards with `query()`
+
+`query(connection, sql)` executes SQL at dashboard load time and returns `{ columns, rows }`. Use it to build dashboards that adapt to the database:
+
+```tsx
+// Discover regions and statuses from the database at load time
+const regions = query("duckdb", "SELECT DISTINCT region FROM sales ORDER BY 1")
+const statuses = query("duckdb", "SELECT DISTINCT status FROM orders ORDER BY 1")
+const tables = query("duckdb",
+  "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY 1"
+)
+
+function KPI({ name, sql, prefix, ...rest }) {
+  return <Metric name={name} sql={sql} column="value" format="number" prefix={prefix} {...rest} />
+}
+
+export default (
+  <Dashboard name="Sales (TSX)" connection="duckdb">
+    {/* Filter options built from live data */}
+    <Filter name="region" type="select" default="All"
+      options={{ values: ["All", ...regions.rows.map(r => r[0])] }} />
+
+    {/* Auto-generated per-region KPIs — adapts when data changes */}
+    <Row>
+      {regions.rows.map(([region]) => (
+        <KPI name={region} prefix="$"
+          col={Math.floor(12 / regions.rows.length)}
+          sql={`SELECT SUM(amount) as value FROM sales WHERE region = '${region}'`} />
+      ))}
+    </Row>
+
+    {/* Data-driven SQL generation — each region becomes a CASE clause */}
+    <Row>
+      <Chart name="Revenue by Region" chart="bar" stacked={true} col={8}
+        sql={`
+          SELECT STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            ${regions.rows.map(([r]) =>
+              `SUM(CASE WHEN region = '${r}' THEN amount ELSE 0 END) AS "${r}"`
+            ).join(",\n            ")}
+          FROM sales GROUP BY 1 ORDER BY 1
+        `}
+        x="month"
+        y={regions.rows.map(([r]) => r)} />
+    </Row>
+
+    {/* Auto-generated table preview for every table in the DB */}
+    {tables.rows.map(([name]) => (
+      <Row>
+        <Table name={name} col={12}
+          sql={`SELECT * FROM "${name}" ORDER BY created_at DESC LIMIT 10`} />
+      </Row>
+    ))}
+  </Dashboard>
+)
+```
+
+**Offline behavior:** When no backend is available (e.g. `dac validate`), `query()` returns `{ columns: [], rows: [] }` so the file still loads — data-driven sections produce zero widgets.
+
+### Two-Phase Templating
+
+TSX dashboards support both JS template literals (resolved at load time) and Jinja markers (resolved at query time per request):
+
+```tsx
+<Chart name="Revenue" chart="line"
+  sql={`SELECT month, SUM(amount) as rev
+    FROM sales
+    WHERE region = '{{ filters.region }}'
+    AND created_at >= '{{ filters.date_range.start }}'
+    GROUP BY 1 ORDER BY 1`}
+  x="month" y={["rev"]} />
+```
+
+- **`${...}`** (JS template literal) — resolved when goja runs the script at load time
+- **`{{ ... }}`** (Jinja) — preserved in the SQL string, resolved per request with filter values
+
+### `include()` — Read SQL Files
+
+```tsx
+const sql = include("queries/recent_orders.sql")
+
+export default (
+  <Dashboard name="Orders" connection="duckdb">
+    <Row>
+      <Table name="Recent" sql={sql} col={12} />
+    </Row>
+  </Dashboard>
+)
+```
+
+### `require()` — Import Shared Modules
+
+Import shared `.tsx`, `.js`, or `.json` files using CommonJS `require()`:
+
+```tsx
+// lib/kpi.tsx
+function KPI({ name, sql, ...rest }) {
+  return <Metric name={name} sql={sql} column="value" format="number" {...rest} />
+}
+module.exports = { KPI }
+
+// sales.dashboard.tsx
+const { KPI } = require("./lib/kpi")
+
+export default (
+  <Dashboard name="Sales" connection="duckdb">
+    <Row>
+      <KPI name="Revenue" sql="..." prefix="$" col={4} />
+    </Row>
+  </Dashboard>
+)
+```
+
+- Paths resolve relative to the importing file
+- `.tsx`/`.ts`/`.jsx` files are auto-transpiled
+- Extension auto-resolution: `require("./lib/kpi")` tries `.tsx`, `.ts`, `.jsx`, `.js`, `.json`
+- Module cache: each file is executed once
+
+### Semantic Layer in TSX
+
+```tsx
+<Dashboard name="Google Analytics" connection="gcp-default">
+  <Semantic
+    source={{ table: "events", dateColumn: "event_date", dateFormat: "%Y%m%d" }}
+    metrics={{
+      page_views: { aggregate: "count", filter: { event_name: "page_view" } },
+      users: { aggregate: "count_distinct", column: "user_id" },
+      pages_per_session: { expression: "page_views / sessions" },
+    }}
+    dimensions={{
+      daily: { column: "event_date", type: "date" },
+      country: { column: "geo.country" },
+    }}
+  />
+
+  <Row>
+    <Metric name="Page Views" metric="page_views" col={3} />
+    <Metric name="Users" metric="users" col={3} />
+  </Row>
+
+  <Row>
+    <Chart name="Daily Traffic" chart="area" col={8}
+      dimension="daily" metrics={["page_views", "users"]} />
+  </Row>
+</Dashboard>
+```
+
+### TypeScript IDE Support
+
+Reference `dac.d.ts` (shipped at the repo root) for autocomplete and type checking:
+
+```tsx
+/// <reference path="../../dac.d.ts" />
+
+export default (
+  <Dashboard name="My Dashboard" connection="duckdb">
+    {/* Full autocomplete for all tags, props, and globals */}
+  </Dashboard>
+)
 ```
 
 ---
