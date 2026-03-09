@@ -3,9 +3,11 @@ import { useCallback, useRef } from "react";
 interface ResizeHandleProps {
   side: "left" | "right";
   onResize: (delta: number) => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
 }
 
-export function ResizeHandle({ side, onResize }: ResizeHandleProps) {
+export function ResizeHandle({ side, onResize, onResizeStart, onResizeEnd }: ResizeHandleProps) {
   const startXRef = useRef(0);
 
   const onPointerDown = useCallback(
@@ -14,6 +16,7 @@ export function ResizeHandle({ side, onResize }: ResizeHandleProps) {
       startXRef.current = e.clientX;
       const el = e.currentTarget as HTMLElement;
       el.setPointerCapture(e.pointerId);
+      onResizeStart?.();
 
       const onMove = (ev: PointerEvent) => {
         const dx = ev.clientX - startXRef.current;
@@ -25,12 +28,13 @@ export function ResizeHandle({ side, onResize }: ResizeHandleProps) {
       const onUp = () => {
         el.removeEventListener("pointermove", onMove);
         el.removeEventListener("pointerup", onUp);
+        onResizeEnd?.();
       };
 
       el.addEventListener("pointermove", onMove);
       el.addEventListener("pointerup", onUp);
     },
-    [side, onResize],
+    [side, onResize, onResizeStart, onResizeEnd],
   );
 
   return (

@@ -30,6 +30,9 @@ interface AgentChatProps {
   dashboardName: string;
   isOpen: boolean;
   onClose: () => void;
+  onResize: (delta: number) => void;
+  onResizeStart: () => void;
+  onResizeEnd: () => void;
 }
 
 const THINKING_WORDS = [
@@ -37,18 +40,13 @@ const THINKING_WORDS = [
   "Working", "Analyzing", "Processing", "Examining", "Figuring out",
 ];
 
-export function AgentChat({ dashboardName, isOpen, onClose }: AgentChatProps) {
+export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeStart, onResizeEnd }: AgentChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, setTurnId] = useState<string | null>(null);
-  const [width, setWidth] = useState(380);
-
-  const handleResize = useCallback((delta: number) => {
-    setWidth((w) => Math.max(280, Math.min(600, w + delta)));
-  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -291,9 +289,8 @@ export function AgentChat({ dashboardName, isOpen, onClose }: AgentChatProps) {
   return (
     <div
       className={`agent-sidebar ${isOpen ? "" : "agent-sidebar-closed"}`}
-      style={isOpen ? { width, minWidth: width } : undefined}
     >
-      {isOpen && <ResizeHandle side="right" onResize={handleResize} />}
+      {isOpen && <ResizeHandle side="right" onResize={onResize} onResizeStart={onResizeStart} onResizeEnd={onResizeEnd} />}
       {/* Close button */}
       <button
         onClick={onClose}

@@ -24,13 +24,18 @@ type Dashboard struct {
 	Refresh     *RefreshConfig   `yaml:"refresh,omitempty" json:"refresh,omitempty"`
 	Filters     []Filter         `yaml:"filters,omitempty" json:"filters,omitempty"`
 	Queries     map[string]Query `yaml:"queries,omitempty" json:"queries,omitempty"`
-	Source      *Source               `yaml:"source,omitempty" json:"source,omitempty"`
-	Metrics     map[string]Metric    `yaml:"metrics,omitempty" json:"metrics,omitempty"`
-	Dimensions  map[string]Dimension `yaml:"dimensions,omitempty" json:"dimensions,omitempty"`
+	Semantic    *SemanticLayer   `yaml:"semantic,omitempty" json:"semantic,omitempty"`
 	Rows        []Row            `yaml:"rows" json:"rows"`
 
 	// FilePath is the source file path, not serialized to JSON for API consumers.
 	FilePath string `yaml:"-" json:"-"`
+}
+
+// SemanticLayer groups the declarative source, metrics, and dimensions.
+type SemanticLayer struct {
+	Source     *Source              `yaml:"source,omitempty" json:"source,omitempty"`
+	Metrics    map[string]Metric    `yaml:"metrics,omitempty" json:"metrics,omitempty"`
+	Dimensions map[string]Dimension `yaml:"dimensions,omitempty" json:"dimensions,omitempty"`
 }
 
 type RefreshConfig struct {
@@ -231,13 +236,37 @@ func (d *Dashboard) DateRangeFilterName() string {
 	return ""
 }
 
-// SourceConnection returns the connection for the source, falling back to
-// the dashboard default.
+// SourceConnection returns the connection for the semantic source, falling
+// back to the dashboard default.
 func (d *Dashboard) SourceConnection() string {
-	if d.Source != nil && d.Source.Connection != "" {
-		return d.Source.Connection
+	if d.Semantic != nil && d.Semantic.Source != nil && d.Semantic.Source.Connection != "" {
+		return d.Semantic.Source.Connection
 	}
 	return d.Connection
+}
+
+// SemanticSource returns the semantic layer's source, or nil.
+func (d *Dashboard) SemanticSource() *Source {
+	if d.Semantic != nil {
+		return d.Semantic.Source
+	}
+	return nil
+}
+
+// SemanticMetrics returns the semantic layer's metrics, or nil.
+func (d *Dashboard) SemanticMetrics() map[string]Metric {
+	if d.Semantic != nil {
+		return d.Semantic.Metrics
+	}
+	return nil
+}
+
+// SemanticDimensions returns the semantic layer's dimensions, or nil.
+func (d *Dashboard) SemanticDimensions() map[string]Dimension {
+	if d.Semantic != nil {
+		return d.Semantic.Dimensions
+	}
+	return nil
 }
 
 // FindByName returns the dashboard with the given name from a slice, or nil.

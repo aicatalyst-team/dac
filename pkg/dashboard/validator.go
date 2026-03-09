@@ -84,15 +84,19 @@ func Validate(d *Dashboard) error {
 		}
 	}
 
-	// Validate source and metrics.
-	if len(d.Metrics) > 0 && d.Source == nil {
-		errs = append(errs, "source is required when metrics are defined")
+	// Validate semantic layer.
+	metrics := d.SemanticMetrics()
+	source := d.SemanticSource()
+	dims := d.SemanticDimensions()
+
+	if len(metrics) > 0 && source == nil {
+		errs = append(errs, "semantic.source is required when metrics are defined")
 	}
-	if d.Source != nil && d.Source.Table == "" {
-		errs = append(errs, "source: table is required")
+	if source != nil && source.Table == "" {
+		errs = append(errs, "semantic.source: table is required")
 	}
-	for name, m := range d.Metrics {
-		prefix := fmt.Sprintf("metric %q", name)
+	for name, m := range metrics {
+		prefix := fmt.Sprintf("semantic.metrics %q", name)
 		if m.Expression != "" {
 			if m.Aggregate != "" {
 				errs = append(errs, fmt.Sprintf("%s: cannot specify both aggregate and expression", prefix))
@@ -109,21 +113,21 @@ func Validate(d *Dashboard) error {
 		}
 	}
 	// Validate expression references.
-	for name, m := range d.Metrics {
+	for name, m := range metrics {
 		if m.Expression == "" {
 			continue
 		}
-		if err := validateExpressionRefs(m.Expression, d.Metrics); err != nil {
-			errs = append(errs, fmt.Sprintf("metric %q: %s", name, err.Error()))
+		if err := validateExpressionRefs(m.Expression, metrics); err != nil {
+			errs = append(errs, fmt.Sprintf("semantic.metrics %q: %s", name, err.Error()))
 		}
 	}
 
 	// Validate dimensions.
-	if len(d.Dimensions) > 0 && d.Source == nil {
-		errs = append(errs, "source is required when dimensions are defined")
+	if len(dims) > 0 && source == nil {
+		errs = append(errs, "semantic.source is required when dimensions are defined")
 	}
-	for name, dim := range d.Dimensions {
-		prefix := fmt.Sprintf("dimension %q", name)
+	for name, dim := range dims {
+		prefix := fmt.Sprintf("semantic.dimensions %q", name)
 		if dim.Column == "" {
 			errs = append(errs, fmt.Sprintf("%s: column is required", prefix))
 		}
@@ -199,8 +203,10 @@ func validateExpressionRefs(expr string, metrics map[string]Metric) error {
 func validateMetricWidget(prefix string, w *Widget, d *Dashboard) []string {
 	var errs []string
 	if w.MetricRef != "" {
-		if _, ok := d.Metrics[w.MetricRef]; !ok {
-			errs = append(errs, fmt.Sprintf("%s: metric %q not found in metrics map", prefix, w.MetricRef))
+		if m := d.SemanticMetrics(); m == nil {
+			errs = append(errs, fmt.Sprintf("%s: metric %q referenced but no semantic.metrics defined", prefix, w.MetricRef))
+		} else if _, ok := m[w.MetricRef]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: metric %q not found in semantic.metrics", prefix, w.MetricRef))
 		}
 		return errs
 	}
@@ -233,15 +239,19 @@ func validateChartWidget(prefix string, w *Widget, d *Dashboard) []string {
 	if w.Dimension != "" || len(w.MetricRefs) > 0 {
 		if w.Dimension == "" {
 			errs = append(errs, fmt.Sprintf("%s: dimension is required when metrics are specified", prefix))
-		} else if _, ok := d.Dimensions[w.Dimension]; !ok {
-			errs = append(errs, fmt.Sprintf("%s: dimension %q not found in dimensions map", prefix, w.Dimension))
+		} else if dims := d.SemanticDimensions(); dims == nil {
+			errs = append(errs, fmt.Sprintf("%s: dimension %q referenced but no semantic.dimensions defined", prefix, w.Dimension))
+		} else if _, ok := dims[w.Dimension]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: dimension %q not found in semantic.dimensions", prefix, w.Dimension))
 		}
 		if len(w.MetricRefs) == 0 {
 			errs = append(errs, fmt.Sprintf("%s: metrics are required when dimension is specified", prefix))
 		}
 		for _, ref := range w.MetricRefs {
-			if _, ok := d.Metrics[ref]; !ok {
-				errs = append(errs, fmt.Sprintf("%s: metric %q not found in metrics map", prefix, ref))
+			if m := d.SemanticMetrics(); m == nil {
+				errs = append(errs, fmt.Sprintf("%s: metric %q referenced but no semantic.metrics defined", prefix, ref))
+			} else if _, ok := m[ref]; !ok {
+				errs = append(errs, fmt.Sprintf("%s: metric %q not found in semantic.metrics", prefix, ref))
 			}
 		}
 		return errs

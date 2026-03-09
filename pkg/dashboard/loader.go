@@ -67,8 +67,8 @@ func LoadFile(path string) (*Dashboard, error) {
 
 			// Dimensional chart: auto-set x and y from dimension/metrics.
 			if w.Dimension != "" && len(w.MetricRefs) > 0 {
-				if dim, ok := d.Dimensions[w.Dimension]; ok {
-					if w.X == "" {
+				if dims := d.SemanticDimensions(); dims != nil {
+					if dim, ok := dims[w.Dimension]; ok && w.X == "" {
 						d.Rows[i].Widgets[j].X = DimensionAlias(dim.Column)
 					}
 				}

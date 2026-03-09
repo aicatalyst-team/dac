@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -409,7 +410,61 @@ func dateWhereClause(source *Source, dateFilter map[string]any) string {
 		col = fmt.Sprintf("PARSE_DATE('%s', %s)", source.DateFormat, source.DateColumn)
 	}
 
-	return fmt.Sprintf("%s >= '%s' AND %s <= '%s'", col, start, col, end)
+	clause := fmt.Sprintf("%s >= '%s' AND %s <= '%s'", col, start, col, end)
+
+	// For BigQuery wildcard tables (ending with *), add _TABLE_SUFFIX pruning
+	// so BigQuery can skip entire shards at the storage layer instead of
+	// scanning every table matching the wildcard.
+	if strings.HasSuffix(source.Table, "*`") || strings.HasSuffix(source.Table, "*") {
+		if suffix, ok := tableSuffixRange(source.DateFormat, start, end); ok {
+			clause += fmt.Sprintf(" AND _TABLE_SUFFIX BETWEEN '%s' AND '%s'", suffix[0], suffix[1])
+		}
+	}
+
+	return clause
+}
+
+// tableSuffixRange converts ISO date strings (2025-06-01) to BigQuery
+// _TABLE_SUFFIX format based on the source's date_format. Returns the
+// start/end suffix strings and true, or false if conversion isn't possible.
+func tableSuffixRange(dateFormat, start, end string) ([2]string, bool) {
+	if dateFormat == "" {
+		return [2]string{}, false
+	}
+
+	startDate, err := time.Parse("2006-01-02", start)
+	if err != nil {
+		return [2]string{}, false
+	}
+	endDate, err := time.Parse("2006-01-02", end)
+	if err != nil {
+		return [2]string{}, false
+	}
+
+	goFmt := convertDateFormat(dateFormat)
+	if goFmt == "" {
+		return [2]string{}, false
+	}
+
+	return [2]string{startDate.Format(goFmt), endDate.Format(goFmt)}, true
+}
+
+// convertDateFormat converts a strftime-style format to Go's time format.
+func convertDateFormat(fmt string) string {
+	r := strings.NewReplacer(
+		"%Y", "2006",
+		"%m", "01",
+		"%d", "02",
+		"%H", "15",
+		"%M", "04",
+		"%S", "05",
+	)
+	result := r.Replace(fmt)
+	// If nothing was replaced, the format is unsupported.
+	if result == fmt {
+		return ""
+	}
+	return result
 }
 
 // EvaluateExpression evaluates a simple arithmetic expression with metric

@@ -172,6 +172,71 @@ func TestDateWhereClause(t *testing.T) {
 	})
 }
 
+// --- _TABLE_SUFFIX pruning tests ---
+
+func TestDateWhereClause_WildcardTableSuffix(t *testing.T) {
+	s := &Source{
+		Table:      "`project.dataset.events_*`",
+		DateColumn: "event_date",
+		DateFormat: "%Y%m%d",
+	}
+	got := dateWhereClause(s, map[string]any{"start": "2025-06-01", "end": "2025-12-31"})
+	assertContains(t, got, "_TABLE_SUFFIX BETWEEN '20250601' AND '20251231'")
+}
+
+func TestDateWhereClause_NonWildcardNoSuffix(t *testing.T) {
+	s := &Source{
+		Table:      "events",
+		DateColumn: "event_date",
+		DateFormat: "%Y%m%d",
+	}
+	got := dateWhereClause(s, map[string]any{"start": "2025-01-01", "end": "2025-12-31"})
+	assertNotContains(t, got, "_TABLE_SUFFIX")
+}
+
+func TestTableSuffixRange(t *testing.T) {
+	t.Run("YYYYMMDD", func(t *testing.T) {
+		result, ok := tableSuffixRange("%Y%m%d", "2025-06-01", "2025-12-31")
+		if !ok {
+			t.Fatal("expected ok")
+		}
+		assertEqual(t, result[0], "20250601")
+		assertEqual(t, result[1], "20251231")
+	})
+
+	t.Run("no format", func(t *testing.T) {
+		_, ok := tableSuffixRange("", "2025-01-01", "2025-12-31")
+		if ok {
+			t.Fatal("expected not ok for empty format")
+		}
+	})
+
+	t.Run("bad date", func(t *testing.T) {
+		_, ok := tableSuffixRange("%Y%m%d", "not-a-date", "2025-12-31")
+		if ok {
+			t.Fatal("expected not ok for bad date")
+		}
+	})
+}
+
+func TestConvertDateFormat(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"%Y%m%d", "20060102"},
+		{"%Y-%m-%d", "2006-01-02"},
+		{"%Y", "2006"},
+		{"unknown", ""},
+	}
+	for _, tt := range tests {
+		got := convertDateFormat(tt.in)
+		if got != tt.want {
+			t.Errorf("convertDateFormat(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 // --- filterCondition tests ---
 
 func TestFilterCondition(t *testing.T) {

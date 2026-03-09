@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { getDashboardRaw } from "../api/client";
 import { useShikiHighlight } from "../hooks/useShikiHighlight";
 import { ResizeHandle } from "./ResizeHandle";
@@ -7,12 +7,14 @@ interface YamlPanelProps {
   dashboardName: string;
   isOpen: boolean;
   onClose: () => void;
+  onResize: (delta: number) => void;
+  onResizeStart: () => void;
+  onResizeEnd: () => void;
 }
 
-export function YamlPanel({ dashboardName, isOpen, onClose }: YamlPanelProps) {
+export function YamlPanel({ dashboardName, isOpen, onClose, onResize, onResizeStart, onResizeEnd }: YamlPanelProps) {
   const [yaml, setYaml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [width, setWidth] = useState(420);
 
   const html = useShikiHighlight(yaml, "yaml");
 
@@ -24,16 +26,11 @@ export function YamlPanel({ dashboardName, isOpen, onClose }: YamlPanelProps) {
       .catch((err) => setError(err.message));
   }, [isOpen, dashboardName]);
 
-  const handleResize = useCallback((delta: number) => {
-    setWidth((w) => Math.max(280, Math.min(800, w + delta)));
-  }, []);
-
   return (
     <div
       className={`yaml-sidebar ${isOpen ? "" : "yaml-sidebar-closed"}`}
-      style={isOpen ? { width, minWidth: width } : undefined}
     >
-      {isOpen && <ResizeHandle side="left" onResize={handleResize} />}
+      {isOpen && <ResizeHandle side="left" onResize={onResize} onResizeStart={onResizeStart} onResizeEnd={onResizeEnd} />}
       <button
         onClick={onClose}
         className="absolute top-2.5 right-2.5 z-10 w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--dac-surface-hover)] text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)] transition-colors"

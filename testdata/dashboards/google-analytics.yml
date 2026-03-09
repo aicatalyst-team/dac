@@ -15,42 +15,43 @@ filters:
       start: "2025-06-01"
       end: "2026-03-06"
 
-source:
-  table: "`bruin-landing-page.{% if filters.property == 'Bruin Cloud' %}analytics_417958677{% elif filters.property == 'Ingestr Docs' %}analytics_428962930{% else %}analytics_469869843{% endif %}.events_intraday_*`"
-  date_column: event_date
-  date_format: "%Y%m%d"
+semantic:
+  source:
+    table: "`bruin-landing-page.{% if filters.property == 'Bruin Cloud' %}analytics_417958677{% elif filters.property == 'Ingestr Docs' %}analytics_428962930{% else %}analytics_469869843{% endif %}.events_intraday_*`"
+    date_column: event_date
+    date_format: "%Y%m%d"
 
-dimensions:
-  daily:
-    column: event_date
-    type: date
+  dimensions:
+    daily:
+      column: event_date
+      type: date
 
-  country:
-    column: geo.country
+    country:
+      column: geo.country
 
-  event:
-    column: event_name
+    event:
+      column: event_name
 
-metrics:
-  page_views:
-    aggregate: count
-    filter:
-      event_name: page_view
+  metrics:
+    page_views:
+      aggregate: count
+      filter:
+        event_name: page_view
 
-  users:
-    aggregate: count_distinct
-    column: user_pseudo_id
+    users:
+      aggregate: count_distinct
+      column: user_pseudo_id
 
-  sessions:
-    aggregate: count
-    filter:
-      event_name: session_start
+    sessions:
+      aggregate: count
+      filter:
+        event_name: session_start
 
-  events:
-    aggregate: count
+    events:
+      aggregate: count
 
-  pages_per_session:
-    expression: page_views / sessions
+    pages_per_session:
+      expression: page_views / sessions
 
 rows:
   - widgets:
