@@ -61,6 +61,7 @@ func LoadFile(path string) (*Dashboard, error) {
 	}
 
 	d.FilePath = path
+	d.FileType = "yaml"
 
 	// Resolve file-based queries (both named and inline on widgets).
 	dir := filepath.Dir(path)

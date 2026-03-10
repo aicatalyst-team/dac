@@ -5,7 +5,7 @@ import { ResizeHandle } from "./ResizeHandle";
 
 // A segment is one block in the agent's response stream, in arrival order.
 type Segment =
-  | { type: "text"; content: string }
+  | { type: "text"; content: string; final?: boolean }
   | { type: "reasoning"; content: string }
   | { type: "item"; item: AgentItem };
 
@@ -18,6 +18,7 @@ interface AgentItem {
   files?: string[];
   text?: string;
   exitCode?: number | null;
+  phase?: string;
 }
 
 interface ChatMessage {
@@ -40,18 +41,63 @@ const THINKING_WORDS = [
   "Working", "Analyzing", "Processing", "Examining", "Figuring out",
 ];
 
+// ── localStorage helpers ──
+const STORAGE_KEY_PREFIX = "dac-agent-";
+
+interface PersistedChat {
+  sessionId: string;
+  messages: ChatMessage[];
+  nextMsgId: number;
+}
+
+function loadChat(dashboard: string): PersistedChat | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PREFIX + dashboard);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedChat;
+  } catch {
+    return null;
+  }
+}
+
+function saveChat(dashboard: string, data: PersistedChat) {
+  try {
+    localStorage.setItem(STORAGE_KEY_PREFIX + dashboard, JSON.stringify(data));
+  } catch { /* quota errors — ignore */ }
+}
+
+function clearChat(dashboard: string) {
+  localStorage.removeItem(STORAGE_KEY_PREFIX + dashboard);
+}
+
 export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeStart, onResizeEnd }: AgentChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Restore persisted state on mount.
+  const persisted = useRef(loadChat(dashboardName));
+
+  const [messages, setMessages] = useState<ChatMessage[]>(persisted.current?.messages ?? []);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(persisted.current?.sessionId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [, setTurnId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const messageIdRef = useRef(0);
+  const messageIdRef = useRef(persisted.current?.nextMsgId ?? 0);
+  // Tracks whether the current agentMessage has phase "final_answer".
+  const finalAnswerRef = useRef(false);
+
+  // Persist messages + sessionId to localStorage.
+  useEffect(() => {
+    if (sessionId) {
+      saveChat(dashboardName, {
+        sessionId,
+        messages,
+        nextMsgId: messageIdRef.current,
+      });
+    }
+  }, [messages, sessionId, dashboardName]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,6 +118,16 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
       eventSourceRef.current?.close();
     };
   }, []);
+
+  // Reconnect SSE for a persisted session when the panel opens.
+  const sseConnectedRef = useRef(false);
+  useEffect(() => {
+    if (isOpen && sessionId && !sseConnectedRef.current) {
+      sseConnectedRef.current = true;
+      connectSSE(sessionId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, sessionId]);
 
   const connectSSE = useCallback(
     (sid: string) => {
@@ -122,15 +178,16 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
       switch (data.type) {
         case "agent_delta": {
           const text = data.text as string;
+          const isFinal = finalAnswerRef.current;
           updateAgent((segs) => {
             const last = segs[segs.length - 1];
-            if (last?.type === "text") {
+            if (last?.type === "text" && !!last.final === isFinal) {
               return [
                 ...segs.slice(0, -1),
-                { type: "text", content: last.content + text },
+                { type: "text", content: last.content + text, final: isFinal || undefined },
               ];
             }
-            return [...segs, { type: "text", content: text }];
+            return [...segs, { type: "text", content: text, final: isFinal || undefined }];
           });
           break;
         }
@@ -153,7 +210,16 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
         case "item_started":
         case "item_completed": {
           const item = data.item as AgentItem;
-          if (!item || item.kind === "agentMessage") break;
+          if (!item) break;
+
+          // agentMessage items carry the phase signal — track it but don't
+          // create a visible segment.
+          if (item.kind === "agentMessage") {
+            if (data.type === "item_started") {
+              finalAnswerRef.current = item.phase === "final_answer";
+            }
+            break;
+          }
 
           // Reasoning items create/update a reasoning segment.
           if (item.kind === "reasoning") {
@@ -224,6 +290,7 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
         case "turn_completed": {
           setIsStreaming(false);
           setTurnId(null);
+          finalAnswerRef.current = false;
           break;
         }
       }
@@ -234,9 +301,22 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
   const createSession = useCallback(async (): Promise<string> => {
     const { session_id } = await createAgentSession(dashboardName);
     setSessionId(session_id);
+    sseConnectedRef.current = true;
     connectSSE(session_id);
     return session_id;
   }, [dashboardName, connectSSE]);
+
+  const handleNewChat = useCallback(() => {
+    eventSourceRef.current?.close();
+    sseConnectedRef.current = false;
+    setMessages([]);
+    setSessionId(null);
+    setError(null);
+    setIsStreaming(false);
+    setTurnId(null);
+    messageIdRef.current = 0;
+    clearChat(dashboardName);
+  }, [dashboardName]);
 
   const ensureSession = useCallback(async (): Promise<string> => {
     if (sessionId) return sessionId;
@@ -291,15 +371,30 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
       className={`agent-sidebar ${isOpen ? "" : "agent-sidebar-closed"}`}
     >
       {isOpen && <ResizeHandle side="right" onResize={onResize} onResizeStart={onResizeStart} onResizeEnd={onResizeEnd} />}
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        className="absolute top-2.5 right-2.5 z-10 w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--dac-surface-hover)] text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)] transition-colors"
-      >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M4 4L12 12M12 4L4 12" />
-        </svg>
-      </button>
+      {/* Header actions */}
+      <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
+        {messages.length > 0 && (
+          <button
+            onClick={handleNewChat}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--dac-surface-hover)] text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)] transition-colors"
+            title="New chat"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3H4C3.45 3 3 3.45 3 4V12C3 12.55 3.45 13 4 13H12C12.55 13 13 12.55 13 12V4C13 3.45 12.55 3 12 3Z" />
+              <path d="M8 6V10" />
+              <path d="M6 8H10" />
+            </svg>
+          </button>
+        )}
+        <button
+          onClick={onClose}
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--dac-surface-hover)] text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)] transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M4 4L12 12M12 4L4 12" />
+          </svg>
+        </button>
+      </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 relative">
@@ -331,9 +426,7 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
           const last = messages[messages.length - 1];
           return !last || last.role !== "agent" || last.segments.length === 0;
         })() && (
-          <div className="text-[12px] text-[var(--dac-text-muted)]">
-            ...
-          </div>
+          <ThinkingBlock segments={[]} isActive={true} />
         )}
 
         {error && (
@@ -414,24 +507,37 @@ function UserMessage({ text }: { text: string }) {
 }
 
 function AgentMessage({ segments, isLastAndStreaming }: { segments: Segment[]; isLastAndStreaming: boolean }) {
-  // Find the last non-text segment to split process vs result.
-  let lastNonTextIdx = -1;
-  for (let i = segments.length - 1; i >= 0; i--) {
-    if (segments[i].type !== "text") { lastNonTextIdx = i; break; }
-  }
+  // Split thinking from result. If any segment has `final: true` (from the
+  // Codex `phase: "final_answer"` signal), split there deterministically.
+  // Otherwise fall back to the position heuristic (text after last non-text).
+  const firstFinalIdx = segments.findIndex(
+    (s) => s.type === "text" && s.final,
+  );
 
   let processSegs: Segment[];
   let resultSegs: Segment[];
 
-  if (lastNonTextIdx === -1) {
-    processSegs = [];
-    resultSegs = segments;
+  if (firstFinalIdx >= 0) {
+    // We know exactly where the final answer starts.
+    processSegs = segments.slice(0, firstFinalIdx);
+    resultSegs = segments.slice(firstFinalIdx);
   } else if (isLastAndStreaming) {
+    // Still streaming, final answer hasn't started — all in thinking.
     processSegs = segments;
     resultSegs = [];
   } else {
-    processSegs = segments.slice(0, lastNonTextIdx + 1);
-    resultSegs = segments.slice(lastNonTextIdx + 1);
+    // Turn done, no final flag — fall back to position heuristic.
+    let lastNonTextIdx = -1;
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (segments[i].type !== "text") { lastNonTextIdx = i; break; }
+    }
+    if (lastNonTextIdx === -1) {
+      processSegs = [];
+      resultSegs = segments;
+    } else {
+      processSegs = segments.slice(0, lastNonTextIdx + 1);
+      resultSegs = segments.slice(lastNonTextIdx + 1);
+    }
   }
 
   return (
@@ -444,7 +550,7 @@ function AgentMessage({ segments, isLastAndStreaming }: { segments: Segment[]; i
       )}
       {resultSegs.map((seg, i) =>
         seg.type === "text" ? (
-          <div key={`r-${i}`} className="agent-md text-[13px] text-[var(--dac-text-secondary)] leading-relaxed">
+          <div key={`r-${i}`} className="agent-md agent-stream-in text-[13px] text-[var(--dac-text-secondary)] leading-relaxed">
             <Markdown>{seg.content}</Markdown>
           </div>
         ) : null,
@@ -501,7 +607,7 @@ function ThinkingBlock({ segments, isActive }: { segments: Segment[]; isActive: 
     : THINKING_WORDS[wordIdx];
 
   return (
-    <div className="text-[11px]">
+    <div className="text-[11px] agent-stream-in">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)] transition-colors"
@@ -516,14 +622,14 @@ function ThinkingBlock({ segments, isActive }: { segments: Segment[]; isActive: 
           {title}
         </span>
       </button>
-      {open && (
+      {open && segments.length > 0 && (
         <div
           ref={scrollRef}
           className="mt-1 pl-3 border-l border-[var(--dac-border)] space-y-1.5 max-h-[200px] overflow-y-auto">
           {segments.map((seg, i) => {
             if (seg.type === "text") {
               return (
-                <div key={i} className="agent-md agent-md-muted text-[var(--dac-text-muted)] leading-relaxed">
+                <div key={i} className="agent-md agent-md-muted agent-stream-in text-[var(--dac-text-muted)] leading-relaxed">
                   <Markdown>{seg.content}</Markdown>
                 </div>
               );
@@ -531,7 +637,7 @@ function ThinkingBlock({ segments, isActive }: { segments: Segment[]; isActive: 
             if (seg.type === "reasoning") {
               if (!seg.content) return null;
               return (
-                <div key={i} className="text-[var(--dac-text-muted)] leading-relaxed whitespace-pre-wrap italic opacity-70">
+                <div key={i} className="agent-stream-in text-[var(--dac-text-muted)] leading-relaxed whitespace-pre-wrap italic opacity-70">
                   {seg.content}
                 </div>
               );
@@ -553,7 +659,7 @@ function ItemDisplay({ item }: { item: AgentItem }) {
   if (item.kind === "commandExecution") {
     if (!item.command) return null;
     return (
-      <div className="rounded bg-[var(--dac-surface)] px-2 py-1.5">
+      <div className="agent-stream-in rounded bg-[var(--dac-surface)] px-2 py-1.5">
         <button
           onClick={() => setExpanded(!expanded)}
           className="flex items-center gap-1.5 w-full text-[11px] text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)] transition-colors"
@@ -581,7 +687,7 @@ function ItemDisplay({ item }: { item: AgentItem }) {
   if (item.kind === "fileChange") {
     if (!item.files?.length) return null;
     return (
-      <div className="flex items-center gap-1.5 text-[11px] text-[var(--dac-text-muted)] rounded bg-[var(--dac-surface)] px-2 py-1.5">
+      <div className="agent-stream-in flex items-center gap-1.5 text-[11px] text-[var(--dac-text-muted)] rounded bg-[var(--dac-surface)] px-2 py-1.5">
         <StatusIcon status={item.status} />
         <span className="font-mono truncate">
           {item.files?.map((f) => f.split("/").pop()).join(", ")}

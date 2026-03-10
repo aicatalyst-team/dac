@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "react-day-picker/style.css";
 
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @font-face {
   font-family: "Geist";
   src: url("https://cdn.jsdelivr.net/fontsource/fonts/geist-sans@latest/latin-400-normal.woff2") format("woff2");
@@ -316,6 +324,62 @@ body {
   user-select: none;
 }
 
+/* Text widget prose */
+.dac-prose {
+  color: var(--dac-text-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.dac-prose h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 0.4em; }
+.dac-prose h2 { font-size: 1.25em; font-weight: 600; margin: 0 0 0.4em; }
+.dac-prose h3 { font-size: 1.1em; font-weight: 600; margin: 0 0 0.3em; }
+.dac-prose h4 { font-size: 1em; font-weight: 600; margin: 0 0 0.3em; }
+.dac-prose p { margin: 0 0 0.5em; }
+.dac-prose p:last-child { margin-bottom: 0; }
+.dac-prose a {
+  color: var(--dac-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dac-prose a:hover { opacity: 0.8; }
+.dac-prose strong { font-weight: 600; }
+.dac-prose code {
+  font-family: "Geist Mono", monospace;
+  font-size: 0.9em;
+  background: var(--dac-surface-hover);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.dac-prose pre {
+  margin: 0.5em 0;
+  padding: 8px 10px;
+  background: var(--dac-surface-hover);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+.dac-prose pre code { background: none; padding: 0; font-size: inherit; }
+.dac-prose ul, .dac-prose ol { margin: 0.3em 0; padding-left: 1.4em; }
+.dac-prose ul { list-style-type: disc; }
+.dac-prose ol { list-style-type: decimal; }
+.dac-prose li { margin: 0.15em 0; }
+.dac-prose blockquote {
+  margin: 0.4em 0;
+  padding-left: 0.8em;
+  border-left: 2px solid var(--dac-border);
+  color: var(--dac-text-secondary);
+}
+.dac-prose hr {
+  border: none;
+  border-top: 1px solid var(--dac-border);
+  margin: 0.8em 0;
+}
+.dac-prose img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+.dac-prose del { opacity: 0.5; }
+
 /* Agent wavy background */
 @keyframes waveShift {
   0% { transform: translateX(0); }
@@ -366,7 +430,7 @@ body {
 .agent-md-muted code { background: var(--dac-border); }
 .agent-md-muted pre { background: var(--dac-border); }
 
-/* Agent thinking shimmer text */
+/* Agent thinking shimmer text — left-to-right sweep */
 .agent-shimmer-text {
   background: linear-gradient(
     90deg,
@@ -378,5 +442,26 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: shimmer 2s ease-in-out infinite;
+  animation: shimmer-ltr 3s ease-in-out infinite;
+}
+
+@keyframes shimmer-ltr {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Streaming text fade-in */
+.agent-stream-in {
+  animation: streamFadeIn 0.35s ease-out both;
+}
+
+@keyframes streamFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

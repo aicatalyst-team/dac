@@ -16,6 +16,7 @@ export interface Dashboard {
   filters?: Filter[];
   queries?: Record<string, Query>;
   rows: Row[];
+  file_type?: "yaml" | "tsx";
 }
 
 export interface Filter {
@@ -38,6 +39,7 @@ export interface Query {
 }
 
 export interface Row {
+  tab?: string;
   height?: number | string;
   widgets: Widget[];
 }

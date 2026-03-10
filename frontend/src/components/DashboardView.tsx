@@ -67,6 +67,23 @@ export function DashboardView() {
     !!activeFilters,
   );
 
+  // ─── Tab support ───
+  // Hooks must be called before any early returns (Rules of Hooks).
+  const tabNames = useMemo(() => {
+    if (!dashboard) return [];
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const row of dashboard.rows) {
+      if (row.tab && !seen.has(row.tab)) {
+        seen.add(row.tab);
+        names.push(row.tab);
+      }
+    }
+    return names;
+  }, [dashboard]);
+
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+
   if (dashLoading) {
     return (
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
@@ -86,6 +103,9 @@ export function DashboardView() {
       </div>
     );
   }
+
+  const hasTabs = tabNames.length > 0;
+  const currentTab = activeTab ?? (hasTabs ? tabNames[0] : null);
 
   const handleFilterChange = (filterName: string, value: unknown) => {
     setFilters((prev) => ({ ...prev, [filterName]: value }));
@@ -158,33 +178,86 @@ export function DashboardView() {
       />
       <div className="overflow-y-auto min-w-0">
         <DashboardLayout dashboard={dashboard} filterBar={filterBar} headerActions={headerActions}>
-          {dashboard.rows.map((row, rowIdx) => (
-            <div
-              key={rowIdx}
-              className="animate-in"
-              style={{ animationDelay: `${50 + rowIdx * 30}ms` }}
-            >
-              <Row>
-                {row.widgets.map((widget, widgetIdx) => {
-                  const id = `r${rowIdx}-w${widgetIdx}`;
-                  const col = widget.col || Math.floor(12 / row.widgets.length);
-                  return (
-                    <WidgetContainer key={id} col={col}>
-                      <WidgetFrame
-                        widget={widget}
-                        data={widgetData?.[id]}
-                        isLoading={dataLoading}
-                      />
-                    </WidgetContainer>
-                  );
-                })}
-              </Row>
-            </div>
-          ))}
+          {/* Rows without a tab — always visible */}
+          {dashboard.rows.map((row, rowIdx) => {
+            if (row.tab) return null;
+            return (
+              <div
+                key={rowIdx}
+                className="animate-in"
+                style={{ animationDelay: `${50 + rowIdx * 30}ms` }}
+              >
+                <Row>
+                  {row.widgets.map((widget, widgetIdx) => {
+                    const id = `r${rowIdx}-w${widgetIdx}`;
+                    const col = widget.col || Math.floor(12 / row.widgets.length);
+                    return (
+                      <WidgetContainer key={id} col={col}>
+                        <WidgetFrame
+                          widget={widget}
+                          data={widgetData?.[id]}
+                          isLoading={dataLoading}
+                        />
+                      </WidgetContainer>
+                    );
+                  })}
+                </Row>
+              </div>
+            );
+          })}
+
+          {/* Tab bar + tab content */}
+          {hasTabs && (
+            <>
+              <div className="flex overflow-x-auto scrollbar-hide border-b border-[var(--dac-border)]">
+                {tabNames.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`shrink-0 px-4 py-2 text-[13px] font-medium transition-colors duration-100 border-b-2 -mb-px ${
+                      currentTab === tab
+                        ? "border-[var(--dac-accent)] text-[var(--dac-text-primary)]"
+                        : "border-transparent text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)]"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {dashboard.rows.map((row, rowIdx) => {
+                if (row.tab !== currentTab) return null;
+                return (
+                  <div
+                    key={rowIdx}
+                    className="animate-in"
+                    style={{ animationDelay: `${50 + rowIdx * 30}ms` }}
+                  >
+                    <Row>
+                      {row.widgets.map((widget, widgetIdx) => {
+                        const id = `r${rowIdx}-w${widgetIdx}`;
+                        const col = widget.col || Math.floor(12 / row.widgets.length);
+                        return (
+                          <WidgetContainer key={id} col={col}>
+                            <WidgetFrame
+                              widget={widget}
+                              data={widgetData?.[id]}
+                              isLoading={dataLoading}
+                            />
+                          </WidgetContainer>
+                        );
+                      })}
+                    </Row>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </DashboardLayout>
       </div>
       <YamlPanel
         dashboardName={name || ""}
+        fileType={dashboard.file_type}
         isOpen={yamlOpen}
         onClose={() => setYamlOpen(false)}
         onResize={handleYamlResize}

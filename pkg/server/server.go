@@ -184,6 +184,10 @@ func (s *Server) Start() error {
 	if err != nil {
 		log.Printf("Warning: file watcher disabled: %v", err)
 	} else {
+		// Clear query cache on file changes so dynamic dashboards get fresh data.
+		if cb, ok := s.backend.(*query.CachedBackend); ok {
+			watcher.invalidators = append(watcher.invalidators, cb)
+		}
 		s.watcher = watcher
 		go s.watcher.Run()
 	}

@@ -322,11 +322,16 @@ func parseItem(raw json.RawMessage) map[string]any {
 	switch base.Type {
 	case "agentMessage":
 		var item struct {
-			ID   string `json:"id"`
-			Text string `json:"text"`
+			ID    string `json:"id"`
+			Text  string `json:"text"`
+			Phase string `json:"phase"`
 		}
 		json.Unmarshal(raw, &item) //nolint:errcheck
-		return map[string]any{"id": item.ID, "kind": "agentMessage", "text": item.Text}
+		m := map[string]any{"id": item.ID, "kind": "agentMessage", "text": item.Text}
+		if item.Phase != "" {
+			m["phase"] = item.Phase
+		}
+		return m
 
 	case "commandExecution":
 		var item struct {

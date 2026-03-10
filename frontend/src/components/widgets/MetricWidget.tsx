@@ -1,3 +1,4 @@
+import { useRef, useEffect, useState } from "react";
 import type { Widget, WidgetData } from "../../types/dashboard";
 
 interface Props {
@@ -18,14 +19,52 @@ function formatValue(value: unknown, format?: string): string {
     case "percent":
       return num.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     case "compact":
-      return Intl.NumberFormat(undefined, { notation: "compact" }).format(num);
+      return Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(num);
     default:
       return num.toLocaleString();
   }
 }
 
+/** Pick the right font size so the value fits its container. */
+function useAutoFit(text: string) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [fontSize, setFontSize] = useState<string>("clamp(1.35rem, 2.5vw, 2rem)");
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // Reset to max size, then shrink if needed.
+    const maxPx = 32; // 2rem
+    const minPx = 16; // 1rem — floor
+    let size = maxPx;
+    el.style.fontSize = `${size}px`;
+
+    // Shrink until text fits or we hit the floor.
+    while (el.scrollWidth > el.clientWidth && size > minPx) {
+      size -= 1;
+      el.style.fontSize = `${size}px`;
+    }
+
+    setFontSize(`${size}px`);
+  }, [text]);
+
+  return { containerRef, fontSize };
+}
+
 export function MetricWidget({ widget, data }: Props) {
-  if (!data?.rows?.length || !data.columns?.length) {
+  const hasData = !!data?.rows?.length && !!data.columns?.length;
+
+  const colIdx = hasData ? data.columns.findIndex((c) => c.name === widget.column) : -1;
+  const rawValue = hasData ? (colIdx >= 0 ? data.rows[0][colIdx] : data.rows[0][0]) : null;
+  const formatted = hasData ? formatValue(rawValue, widget.format) : "";
+
+  // Hook must be called unconditionally (Rules of Hooks).
+  const { containerRef, fontSize } = useAutoFit(
+    `${widget.prefix ?? ""}${formatted}${widget.suffix ?? ""}`
+  );
+
+  if (!hasData) {
     return (
       <div className="h-12">
         <div className="skeleton h-8 w-28" />
@@ -33,24 +72,17 @@ export function MetricWidget({ widget, data }: Props) {
     );
   }
 
-  const colIdx = data.columns.findIndex((c) => c.name === widget.column);
-  const rawValue = colIdx >= 0 ? data.rows[0][colIdx] : data.rows[0][0];
-  const formatted = formatValue(rawValue, widget.format);
-
   return (
-    <div className="tabular-nums">
-      <div className="flex items-baseline gap-1">
+    <div className="tabular-nums overflow-hidden">
+      <div ref={containerRef} className="flex items-baseline gap-1 whitespace-nowrap" style={{ fontSize, lineHeight: 1.1 }}>
         {widget.prefix && (
-          <span className="text-base font-normal text-[var(--dac-text-muted)]">{widget.prefix}</span>
+          <span className="font-normal text-[var(--dac-text-muted)]" style={{ fontSize: "0.65em" }}>{widget.prefix}</span>
         )}
-        <span
-          className="font-semibold tracking-tight text-[var(--dac-text-primary)]"
-          style={{ fontSize: "clamp(1.35rem, 2.5vw, 2rem)", lineHeight: 1.1 }}
-        >
+        <span className="font-semibold tracking-tight text-[var(--dac-text-primary)]">
           {formatted}
         </span>
         {widget.suffix && (
-          <span className="text-sm font-normal text-[var(--dac-text-muted)]">{widget.suffix}</span>
+          <span className="font-normal text-[var(--dac-text-muted)]" style={{ fontSize: "0.65em" }}>{widget.suffix}</span>
         )}
       </div>
     </div>

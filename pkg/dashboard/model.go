@@ -29,6 +29,9 @@ type Dashboard struct {
 
 	// FilePath is the source file path, not serialized to JSON for API consumers.
 	FilePath string `yaml:"-" json:"-"`
+
+	// FileType indicates the source format: "yaml" or "tsx".
+	FileType string `yaml:"-" json:"file_type,omitempty"`
 }
 
 // SemanticLayer groups the declarative source, metrics, and dimensions.
@@ -99,6 +102,7 @@ type Query struct {
 }
 
 type Row struct {
+	Tab     string   `yaml:"tab,omitempty" json:"tab,omitempty"`
 	Height  any      `yaml:"height,omitempty" json:"height,omitempty"`
 	Widgets []Widget `yaml:"widgets" json:"widgets"`
 }

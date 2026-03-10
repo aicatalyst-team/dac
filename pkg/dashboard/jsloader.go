@@ -16,6 +16,7 @@ import (
 var jsxTags = []string{
 	"Dashboard", "Row", "Filter", "Query", "Semantic",
 	"Metric", "Chart", "Table", "Text", "Divider", "Image",
+	"Tabs", "Tab",
 }
 
 // LoadTSXFile loads a single .dashboard.tsx file by transpiling it with esbuild
@@ -37,6 +38,7 @@ func LoadTSXFile(path string, opts ...TSXOption) (*Dashboard, error) {
 	}
 
 	d.FilePath = path
+	d.FileType = "tsx"
 
 	// Run the same post-processing as YAML loader.
 	dir := filepath.Dir(path)
@@ -415,7 +417,31 @@ func vnodeToDashboard(root *vnode) (*Dashboard, error) {
 
 		case "Row":
 			row := vnodeToRow(child)
-			d.Rows = append(d.Rows, row)
+			if len(row.Widgets) > 0 {
+				d.Rows = append(d.Rows, row)
+			}
+
+		case "Tabs":
+			// <Tabs> contains <Tab> children, each with a name and rows.
+			for _, tabChild := range child.Children {
+				if tabChild.Tag != "Tab" {
+					continue
+				}
+				tabName := asString(tabChild.Props["name"])
+				for _, rowChild := range tabChild.Children {
+					if rowChild.Tag == "Row" {
+						row := vnodeToRow(rowChild)
+						row.Tab = tabName
+						if len(row.Widgets) > 0 {
+							d.Rows = append(d.Rows, row)
+						}
+					} else {
+						// Widget directly inside a Tab — wrap in a Row.
+						w := vnodeToWidget(rowChild)
+						d.Rows = append(d.Rows, Row{Tab: tabName, Widgets: []Widget{w}})
+					}
+				}
+			}
 
 		case "Semantic":
 			sem := vnodeToSemantic(child)

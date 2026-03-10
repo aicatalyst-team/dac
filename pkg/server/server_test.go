@@ -42,8 +42,8 @@ func TestListDashboards(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	// 3 YAML + 1 TSX = 4
-	assertEqual(t, len(resp.Dashboards), 4)
+	// 3 YAML + 2 TSX = 5
+	assertEqual(t, len(resp.Dashboards), 5)
 }
 
 func TestGetDashboard(t *testing.T) {

@@ -5,6 +5,7 @@ import { ResizeHandle } from "./ResizeHandle";
 
 interface YamlPanelProps {
   dashboardName: string;
+  fileType?: "yaml" | "tsx";
   isOpen: boolean;
   onClose: () => void;
   onResize: (delta: number) => void;
@@ -12,11 +13,12 @@ interface YamlPanelProps {
   onResizeEnd: () => void;
 }
 
-export function YamlPanel({ dashboardName, isOpen, onClose, onResize, onResizeStart, onResizeEnd }: YamlPanelProps) {
+export function YamlPanel({ dashboardName, fileType, isOpen, onClose, onResize, onResizeStart, onResizeEnd }: YamlPanelProps) {
   const [yaml, setYaml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const html = useShikiHighlight(yaml, "yaml");
+  const lang = fileType === "tsx" ? "tsx" : "yaml";
+  const html = useShikiHighlight(yaml, lang);
 
   useEffect(() => {
     if (!isOpen || !dashboardName) return;

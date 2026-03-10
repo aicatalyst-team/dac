@@ -11,6 +11,32 @@ interface StreamState {
   error: Error | undefined;
 }
 
+/**
+ * Listens for SSE `full_reload` events and bumps a counter so hooks can
+ * re-fetch. Shared across all instances via a module-level listener.
+ */
+let reloadCounter = 0;
+const reloadListeners = new Set<() => void>();
+
+function onReloadTick(fn: () => void) {
+  reloadListeners.add(fn);
+  return () => { reloadListeners.delete(fn); };
+}
+
+// Single SSE listener (module scope, starts once).
+if (typeof window !== "undefined" && !(window as any).__DAC_STATIC__) {
+  const es = new EventSource("/api/v1/events");
+  es.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "full_reload") {
+        reloadCounter++;
+        for (const fn of reloadListeners) fn();
+      }
+    } catch { /* ignore */ }
+  };
+}
+
 export function useDashboardData(
   name: string,
   filters?: Record<string, unknown>,
@@ -62,6 +88,14 @@ export function useDashboardData(
       abortRef.current?.();
       abortRef.current = null;
     };
+  }, [name, enabled, startStream]);
+
+  // Re-stream when dashboard files change (SSE full_reload).
+  useEffect(() => {
+    if (!name || !enabled) return;
+    return onReloadTick(() => {
+      startStream();
+    });
   }, [name, enabled, startStream]);
 
   return { data, isLoading, error };

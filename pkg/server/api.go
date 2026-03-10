@@ -110,7 +110,11 @@ func (s *Server) handleGetDashboardRaw(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, "failed to read dashboard file: "+err.Error())
 				return
 			}
-			w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+			ct := "text/yaml; charset=utf-8"
+			if d.FileType == "tsx" {
+				ct = "text/typescript; charset=utf-8"
+			}
+			w.Header().Set("Content-Type", ct)
 			w.Write(data)
 			return
 		}

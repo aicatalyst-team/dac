@@ -10,12 +10,18 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// Invalidator is called when dashboard files change to clear stale data.
+type Invalidator interface {
+	Invalidate()
+}
+
 // Watcher monitors dashboard files for changes and broadcasts SSE events.
 type Watcher struct {
-	dir       string
-	fsWatcher *fsnotify.Watcher
-	clients   map[chan string]struct{}
-	mu        sync.RWMutex
+	dir          string
+	fsWatcher    *fsnotify.Watcher
+	clients      map[chan string]struct{}
+	mu           sync.RWMutex
+	invalidators []Invalidator
 }
 
 // NewWatcher creates a file watcher for the given directory.
@@ -47,6 +53,10 @@ func (w *Watcher) Run() {
 			}
 			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
 				log.Printf("file changed: %s", event.Name)
+				// Clear cached query results so re-evaluated dashboards get fresh data.
+				for _, inv := range w.invalidators {
+					inv.Invalidate()
+				}
 				w.broadcast(map[string]string{
 					"type": "full_reload",
 					"file": event.Name,
