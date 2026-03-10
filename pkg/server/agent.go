@@ -12,10 +12,8 @@ import (
 	"github.com/bruin-data/dac/pkg/dashboard"
 )
 
-// System prompt prepended to the first turn of each thread.
-const agentSystemPrompt = `You are a dashboard editor for "dac" (Dashboard-as-Code). The user is viewing a dashboard in their browser and wants you to modify it. After you edit a YAML file, the dashboard reloads automatically.
-
-Dashboard YAML structure:
+// Shared dashboard schema reference used by both prompts.
+const dashboardSchemaRef = `Dashboard YAML structure:
 - name, description, connection (default DB connection)
 - filters: [{name, type (select|date-range), default, options}]
 - queries: named reusable SQL queries (sql: inline | file: path.sql)
@@ -34,12 +32,31 @@ Grid: 12-column. Each widget has col:N (1-12). Widgets in a row should sum to 12
 Query templating (Jinja):
 - {{ filters.date_range.start }}, {{ filters.date_range.end }}
 - {% if filters.region != 'All' %} AND region = '{{ filters.region }}' {% endif %}
+`
 
+// System prompt prepended to the first turn of each thread.
+const agentSystemPrompt = `You are a dashboard editor for "dac" (Dashboard-as-Code). The user is viewing a dashboard in their browser and wants you to modify it. After you edit a YAML file, the dashboard reloads automatically.
+
+` + dashboardSchemaRef + `
 Rules:
 - ALWAYS read the dashboard file before modifying it
 - Make minimal, targeted edits — don't rewrite the whole file
 - Preserve existing formatting and comments
 - When adding widgets, respect the 12-column grid
+`
+
+// System prompt for creating a new dashboard from scratch.
+const agentCreatePrompt = `You are a dashboard builder for "dac" (Dashboard-as-Code). The user wants to create a new dashboard. Help them build one by writing a YAML file. After you create the file, the dashboard appears automatically.
+
+` + dashboardSchemaRef + `
+Rules:
+- Create a new .yml file in the dashboard directory (given below)
+- Pick a short, descriptive filename like "sales.yml" or "traffic-overview.yml"
+- Use the user's description to decide which widgets, charts, and metrics to include
+- Ask the user for the database connection name if they don't mention one
+- Write complete, working SQL queries — prefer simple aggregations
+- Start with 2-4 KPI metrics at the top, then charts, then a detail table
+- Respond concisely — create the file, don't over-explain
 `
 
 type createSessionRequest struct {
@@ -98,7 +115,13 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 		dashName := s.sessionDash[sessionID]
 		s.sessionDashMu.RUnlock()
 
-		context := agentSystemPrompt + s.buildDashboardContext() + s.buildActiveDashboardContext(dashName)
+		var prompt string
+		if dashName == "__create__" {
+			prompt = agentCreatePrompt
+		} else {
+			prompt = agentSystemPrompt
+		}
+		context := prompt + s.buildDashboardContext() + s.buildActiveDashboardContext(dashName)
 		input = append(input, map[string]any{"type": "text", "text": context})
 		s.codex.MarkThreadInitialized(sessionID)
 		log.Printf("agent: first turn for thread %s, dashboard %q (%d bytes context)", sessionID, dashName, len(context))
@@ -110,7 +133,7 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 	payload, _ := json.Marshal(input)
 	log.Printf("agent: turn payload (%d bytes): %s", len(payload), string(payload)[:min(500, len(payload))])
 
-	if err := s.codex.StartTurn(sessionID, input); err != nil {
+	if err := s.codex.StartTurn(sessionID, input, s.config.AgentEffort); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to send message: "+err.Error())
 		return
 	}

@@ -51,6 +51,7 @@ export interface WidgetContainerProps {
 export interface DashboardListLayoutProps {
   dashboards: DashboardSummary[];
   adminEnabled?: boolean;
+  onCreateClick?: () => void;
 }
 
 /**

@@ -26,7 +26,8 @@ type Config struct {
 	ConfigFile    string
 	Environment   string
 	AdminPassword string
-	Frontend      fs.FS // embedded frontend files, nil for dev mode
+	AgentEffort   string // reasoning effort for agent turns: "low", "medium", "high"
+	Frontend      fs.FS  // embedded frontend files, nil for dev mode
 }
 
 // Server is the dac HTTP server.

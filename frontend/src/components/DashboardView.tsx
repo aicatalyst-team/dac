@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { useDashboard } from "../hooks/useDashboard";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useTemplate } from "../themes/TemplateProvider";
@@ -29,8 +29,9 @@ const isStaticMode = !!(window as any).__DAC_STATIC__;
 
 export function DashboardView() {
   const { name } = useParams<{ name: string }>();
+  const location = useLocation();
   const { data: dashboard, isLoading: dashLoading, error: dashError } = useDashboard(name || "");
-  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(() => !!(location.state as any)?.agentOpen);
   const [yamlOpen, setYamlOpen] = useState(false);
   const [agentWidth, setAgentWidth] = useState(380);
   const [yamlWidth, setYamlWidth] = useState(420);

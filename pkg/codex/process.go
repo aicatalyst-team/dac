@@ -377,7 +377,8 @@ func (p *Process) StartThread(cwd, model string) (string, error) {
 }
 
 // StartTurn sends a user message to an existing thread.
-func (p *Process) StartTurn(threadID string, input []map[string]any) error {
+// effort controls reasoning intensity ("low", "medium", "high"); empty means server default.
+func (p *Process) StartTurn(threadID string, input []map[string]any, effort string) error {
 	if err := p.ensureStarted(); err != nil {
 		return err
 	}
@@ -385,6 +386,9 @@ func (p *Process) StartTurn(threadID string, input []map[string]any) error {
 	params := map[string]any{
 		"threadId": threadID,
 		"input":    input,
+	}
+	if effort != "" {
+		params["effort"] = effort
 	}
 	data, _ := json.Marshal(params)
 

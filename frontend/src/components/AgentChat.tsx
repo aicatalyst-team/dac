@@ -34,6 +34,7 @@ interface AgentChatProps {
   onResize: (delta: number) => void;
   onResizeStart: () => void;
   onResizeEnd: () => void;
+  onDashboardCreated?: (name: string) => void;
 }
 
 const THINKING_WORDS = [
@@ -70,7 +71,7 @@ function clearChat(dashboard: string) {
   localStorage.removeItem(STORAGE_KEY_PREFIX + dashboard);
 }
 
-export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeStart, onResizeEnd }: AgentChatProps) {
+export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeStart, onResizeEnd, onDashboardCreated }: AgentChatProps) {
   // Restore persisted state on mount.
   const persisted = useRef(loadChat(dashboardName));
 
@@ -87,6 +88,9 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
   const messageIdRef = useRef(persisted.current?.nextMsgId ?? 0);
   // Tracks whether the current agentMessage has phase "final_answer".
   const finalAnswerRef = useRef(false);
+  // Stable ref for the creation callback so handleSSEEvent doesn't need it as a dep.
+  const onCreatedRef = useRef(onDashboardCreated);
+  onCreatedRef.current = onDashboardCreated;
 
   // Persist messages + sessionId to localStorage.
   useEffect(() => {
@@ -247,6 +251,27 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
             break;
           }
 
+          // Detect newly created dashboard files from fileChange events.
+          if (
+            data.type === "item_completed" &&
+            item.kind === "fileChange" &&
+            item.status === "applied" &&
+            item.files?.length &&
+            onCreatedRef.current
+          ) {
+            for (const f of item.files) {
+              if (f.match(/\.(yml|yaml)$/) || f.match(/\.dashboard\.tsx$/)) {
+                const basename = f.split("/").pop() ?? "";
+                const name = basename.replace(/\.(dashboard\.tsx|yml|yaml)$/, "");
+                if (name) {
+                  // Delay slightly so the loader picks up the new file.
+                  setTimeout(() => onCreatedRef.current?.(name), 500);
+                }
+                break;
+              }
+            }
+          }
+
           updateAgent((segs) => {
             const idx = segs.findIndex(
               (s) => s.type === "item" && s.item.id === item.id,
@@ -403,7 +428,10 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
             <WavyBackground />
             <div className="mt-auto px-4 pb-4">
               <p className="text-[12px] text-[var(--dac-text-muted)]">
-                Describe changes to <span className="font-mono text-[var(--dac-text-secondary)]">{dashboardName}</span>
+                {dashboardName === "__create__"
+                  ? "Describe the dashboard you want to create"
+                  : <>Describe changes to <span className="font-mono text-[var(--dac-text-secondary)]">{dashboardName}</span></>
+                }
               </p>
             </div>
           </div>
@@ -446,7 +474,7 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe what to change..."
+            placeholder={dashboardName === "__create__" ? "Describe the dashboard you want..." : "Describe what to change..."}
             rows={1}
             className="w-full resize-none rounded border border-[var(--dac-border)] bg-[var(--dac-surface)] text-[var(--dac-text-primary)] placeholder:text-[var(--dac-text-muted)] text-[13px] pl-3 pr-8 py-2 focus:outline-none focus:border-[var(--dac-text-muted)] transition-colors"
           />
