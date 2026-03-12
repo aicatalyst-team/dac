@@ -40,6 +40,24 @@ Bruin is an engineering-grade data tool that presents information with authority
 - Custom theme system with CSS variables (`--dac-*`)
 - Go backend with embedded frontend (single binary)
 
+## Build & Development
+
+**Always use `make` commands** — never run `go build`, `npm run build`, `go test`, or similar directly. The Makefile handles cross-cutting concerns (frontend embedding, CGO flags, correct build order).
+
+| Command | Purpose |
+|---|---|
+| `make dev` | Run frontend + backend with live reload (for development) |
+| `make dev-frontend` | Frontend dev server only (Vite, proxies API to :8321) |
+| `make dev-backend` | Backend only with live reload (via `air`) |
+| `make build` | Production build: frontend → embed → Go binary |
+| `make frontend` | Build frontend and copy to `web/` for Go embedding |
+| `make test` | Run all tests |
+| `make deps` | Install Go + npm dependencies |
+| `make format` | Run `go vet` |
+| `make clean` | Remove build artifacts |
+
+When verifying Go changes compile, use `go build ./...` for a quick check, but always use `make build` for a real build.
+
 ## Skills
 
 - `/create-dashboard [description]` — Full reference for creating dac dashboard YAML files. Covers widget types (metric, chart, table, text), filters, query templating (Jinja), grid layout, and CLI usage.

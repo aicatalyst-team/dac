@@ -38,6 +38,7 @@ func NewApp() *cli.Command {
 			queryCmd(),
 			lsCmd(),
 			connectionsCmd(),
+			exportCmd(),
 		},
 	}
 }
