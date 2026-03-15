@@ -1,12 +1,13 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useDashboard } from "../hooks/useDashboard";
-import { useDashboardData } from "../hooks/useDashboardData";
+import { useWidgetQuery } from "../hooks/useWidgetQuery";
 import { useTemplate } from "../themes/TemplateProvider";
 import { resolvePreset } from "../themes/bruin/FilterBar";
 import { AgentChat } from "./AgentChat";
 import { YamlPanel } from "./YamlPanel";
-import type { Filter } from "../types/dashboard";
+import type { Filter, Widget } from "../types/dashboard";
+import type { WidgetFrameProps } from "../types/template";
 
 function buildDefaultFilters(dashboard: { filters?: Filter[] }): Record<string, unknown> {
   const defaults: Record<string, unknown> = {};
@@ -27,22 +28,111 @@ function buildDefaultFilters(dashboard: { filters?: Filter[] }): Record<string, 
 
 const isStaticMode = !!(window as any).__DAC_STATIC__;
 
+// Non-data widget types that don't need a query.
+const STATIC_WIDGET_TYPES = new Set(["text", "divider", "image"]);
+
+// Persist sidebar state across navigation (module-level, resets on page refresh).
+let _agentOpen = false;
+let _yamlOpen = false;
+let _agentWidth = 380;
+let _yamlWidth = 420;
+
+/**
+ * DataWidget fetches data for a single widget via its own API call.
+ * This allows tab-aware lazy loading and future viewport-based deferral.
+ */
+function DataWidget({
+  dashboardName,
+  widgetId,
+  widget,
+  filters,
+  WidgetFrame,
+}: {
+  dashboardName: string;
+  widgetId: string;
+  widget: Widget;
+  filters?: Record<string, unknown>;
+  WidgetFrame: React.ComponentType<WidgetFrameProps>;
+}) {
+  // Static widgets (text, divider, image) don't need data.
+  if (STATIC_WIDGET_TYPES.has(widget.type)) {
+    return <WidgetFrame widget={widget} isLoading={false} />;
+  }
+
+  return (
+    <DataWidgetInner
+      dashboardName={dashboardName}
+      widgetId={widgetId}
+      widget={widget}
+      filters={filters}
+      WidgetFrame={WidgetFrame}
+    />
+  );
+}
+
+/** Inner component — calls the hook unconditionally (Rules of Hooks). */
+function DataWidgetInner({
+  dashboardName,
+  widgetId,
+  widget,
+  filters,
+  WidgetFrame,
+}: {
+  dashboardName: string;
+  widgetId: string;
+  widget: Widget;
+  filters?: Record<string, unknown>;
+  WidgetFrame: React.ComponentType<WidgetFrameProps>;
+}) {
+  const { data, isLoading } = useWidgetQuery(dashboardName, widgetId, filters);
+  return <WidgetFrame widget={widget} data={data} isLoading={isLoading} />;
+}
+
 export function DashboardView() {
   const { name } = useParams<{ name: string }>();
   const location = useLocation();
   const { data: dashboard, isLoading: dashLoading, error: dashError } = useDashboard(name || "");
-  const [agentOpen, setAgentOpen] = useState(() => !!(location.state as any)?.agentOpen);
-  const [yamlOpen, setYamlOpen] = useState(false);
-  const [agentWidth, setAgentWidth] = useState(380);
-  const [yamlWidth, setYamlWidth] = useState(420);
+  const [agentOpen, _setAgentOpen] = useState(() => !!(location.state as any)?.agentOpen || _agentOpen);
+  const [yamlOpen, _setYamlOpen] = useState(_yamlOpen);
+  const [agentWidth, _setAgentWidth] = useState(_agentWidth);
+  const [yamlWidth, _setYamlWidth] = useState(_yamlWidth);
+
+  const setAgentOpen = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
+    _setAgentOpen((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      _agentOpen = next;
+      return next;
+    });
+  }, []);
+  const setYamlOpen = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
+    _setYamlOpen((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      _yamlOpen = next;
+      return next;
+    });
+  }, []);
+  const setAgentWidth = useCallback((v: number | ((prev: number) => number)) => {
+    _setAgentWidth((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      _agentWidth = next;
+      return next;
+    });
+  }, []);
+  const setYamlWidth = useCallback((v: number | ((prev: number) => number)) => {
+    _setYamlWidth((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      _yamlWidth = next;
+      return next;
+    });
+  }, []);
   const [isResizing, setIsResizing] = useState(false);
 
   const handleAgentResize = useCallback((delta: number) => {
-    setAgentWidth((w) => Math.max(280, Math.min(600, w + delta)));
-  }, []);
+    setAgentWidth((w: number) => Math.max(280, Math.min(600, w + delta)));
+  }, [setAgentWidth]);
   const handleYamlResize = useCallback((delta: number) => {
-    setYamlWidth((w) => Math.max(280, Math.min(800, w + delta)));
-  }, []);
+    setYamlWidth((w: number) => Math.max(280, Math.min(800, w + delta)));
+  }, [setYamlWidth]);
   const onResizeStart = useCallback(() => setIsResizing(true), []);
   const onResizeEnd = useCallback(() => setIsResizing(false), []);
 
@@ -61,12 +151,6 @@ export function DashboardView() {
     Row,
     WidgetContainer,
   } = useTemplate();
-
-  const { data: widgetData, isLoading: dataLoading } = useDashboardData(
-    name || "",
-    activeFilters ?? undefined,
-    !!activeFilters,
-  );
 
   // ─── Tab support ───
   // Hooks must be called before any early returns (Rules of Hooks).
@@ -171,6 +255,22 @@ export function DashboardView() {
 
   const gridColumns = `${agentOpen ? agentWidth : 0}px 1fr ${yamlOpen ? yamlWidth : 0}px`;
 
+  const renderWidget = (widget: Widget, rowIdx: number, widgetIdx: number, totalInRow: number) => {
+    const id = `r${rowIdx}-w${widgetIdx}`;
+    const col = widget.col || Math.floor(12 / totalInRow);
+    return (
+      <WidgetContainer key={id} col={col}>
+        <DataWidget
+          dashboardName={name || ""}
+          widgetId={id}
+          widget={widget}
+          filters={activeFilters ?? undefined}
+          WidgetFrame={WidgetFrame}
+        />
+      </WidgetContainer>
+    );
+  };
+
   return (
     <div
       className={`dac-layout h-screen overflow-hidden ${isResizing ? "dac-layout-resizing" : ""}`}
@@ -196,19 +296,9 @@ export function DashboardView() {
                 style={{ animationDelay: `${50 + rowIdx * 30}ms` }}
               >
                 <Row>
-                  {row.widgets.map((widget, widgetIdx) => {
-                    const id = `r${rowIdx}-w${widgetIdx}`;
-                    const col = widget.col || Math.floor(12 / row.widgets.length);
-                    return (
-                      <WidgetContainer key={id} col={col}>
-                        <WidgetFrame
-                          widget={widget}
-                          data={widgetData?.[id]}
-                          isLoading={dataLoading}
-                        />
-                      </WidgetContainer>
-                    );
-                  })}
+                  {row.widgets.map((widget, widgetIdx) =>
+                    renderWidget(widget, rowIdx, widgetIdx, row.widgets.length),
+                  )}
                 </Row>
               </div>
             );
@@ -242,19 +332,9 @@ export function DashboardView() {
                     style={{ animationDelay: `${50 + rowIdx * 30}ms` }}
                   >
                     <Row>
-                      {row.widgets.map((widget, widgetIdx) => {
-                        const id = `r${rowIdx}-w${widgetIdx}`;
-                        const col = widget.col || Math.floor(12 / row.widgets.length);
-                        return (
-                          <WidgetContainer key={id} col={col}>
-                            <WidgetFrame
-                              widget={widget}
-                              data={widgetData?.[id]}
-                              isLoading={dataLoading}
-                            />
-                          </WidgetContainer>
-                        );
-                      })}
+                      {row.widgets.map((widget, widgetIdx) =>
+                        renderWidget(widget, rowIdx, widgetIdx, row.widgets.length),
+                      )}
                     </Row>
                   </div>
                 );

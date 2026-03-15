@@ -573,6 +573,71 @@ func FanoutSingleMetric(merged *WidgetQueryResult, metricRef string, sql string,
 	}
 }
 
+// handleWidgetQuery executes a single widget's query and returns the result.
+// This allows the frontend to fetch data per-widget (lazy, on-demand).
+func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	widgetID := r.PathValue("widgetId")
+
+	var req batchQueryRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+	}
+
+	dashboards, err := s.loader.Load()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var d *dashboard.Dashboard
+	for _, dash := range dashboards {
+		if dash.Name == name {
+			d = dash
+			break
+		}
+	}
+	if d == nil {
+		writeError(w, http.StatusNotFound, "dashboard not found: "+name)
+		return
+	}
+
+	filters := d.DefaultFilters()
+	for k, v := range req.Filters {
+		filters[k] = v
+	}
+
+	// Resolve all jobs and find the one matching this widget ID.
+	// For metric-ref widgets the merged job's MetricFanout map contains the widget ID.
+	jobs, err := ResolveWidgetJobs(d, filters)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	for _, j := range jobs {
+		if j.ID == widgetID {
+			wr := ExecuteWidgetQuery(r.Context(), s.backend, j)
+			writeJSON(w, http.StatusOK, wr)
+			return
+		}
+		// Check if this widget is part of a merged metrics job.
+		if j.MetricFanout != nil {
+			if _, ok := j.MetricFanout[widgetID]; ok {
+				wr := ExecuteWidgetQuery(r.Context(), s.backend, j)
+				result := FanoutSingleMetric(wr, j.MetricFanout[widgetID], j.SQL, d)
+				writeJSON(w, http.StatusOK, result)
+				return
+			}
+		}
+	}
+
+	writeError(w, http.StatusNotFound, "widget not found: "+widgetID)
+}
+
 func toFloat64(v any) (float64, bool) {
 	switch n := v.(type) {
 	case float64:

@@ -158,6 +158,23 @@ export function streamDashboardData(
   return () => controller.abort();
 }
 
+export async function fetchWidgetData(
+  dashboardName: string,
+  widgetId: string,
+  filters?: Record<string, unknown>,
+): Promise<WidgetData> {
+  const sp = getStaticPayload();
+  if (sp) return sp.widgetData[widgetId];
+  return fetchJSON<WidgetData>(
+    `${BASE}/dashboards/${encodeURIComponent(dashboardName)}/widgets/${encodeURIComponent(widgetId)}/query`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filters: filters ?? {} }),
+    },
+  );
+}
+
 export async function listThemes(): Promise<string[]> {
   const data = await fetchJSON<{ themes: string[] }>(`${BASE}/themes`);
   return data.themes;

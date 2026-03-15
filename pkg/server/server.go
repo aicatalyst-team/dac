@@ -123,6 +123,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/v1/dashboards/{name}/raw", s.handleGetDashboardRaw)
 	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/data", s.handleBatchQuery)
 	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/stream", s.handleStreamQuery)
+	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/widgets/{widgetId}/query", s.handleWidgetQuery)
 	s.mux.HandleFunc("POST /api/v1/query", s.handleSingleQuery)
 	s.mux.HandleFunc("GET /api/v1/themes", s.handleListThemes)
 	s.mux.HandleFunc("GET /api/v1/themes/{name}", s.handleGetTheme)
