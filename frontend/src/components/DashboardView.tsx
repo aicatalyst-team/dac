@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useDashboard } from "../hooks/useDashboard";
 import { useDashboardData } from "../hooks/useDashboardData";
@@ -84,6 +84,13 @@ export function DashboardView() {
   }, [dashboard]);
 
   const [activeTab, setActiveTab] = useState<string | null>(null);
+
+  // Reset local state when the dashboard definition changes (e.g. agent edits the file).
+  // This avoids a full remount so AgentChat stays alive.
+  useEffect(() => {
+    setFilters(null);
+    setActiveTab(null);
+  }, [dashboard]);
 
   if (dashLoading) {
     return (

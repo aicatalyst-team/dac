@@ -122,7 +122,7 @@ function bestAggregate(colName) {
 const sortedTables = tableNames.sort((a, b) => (rowCounts[b] || 0) - (rowCounts[a] || 0))
 const mainTables = sortedTables.slice(0, 8)
 const totalRows = Object.values(rowCounts).reduce((a, b) => a + b, 0)
-const smallestTable = sortedTables[sortedTables.length - 1] || "none"
+const largestTable = sortedTables[0] || "none"
 const tabOrder = sortedTables
 
 // ─── BUILD THE DASHBOARD ────────────────────────────────────────────────────
@@ -147,15 +147,15 @@ export default (
         format="number"
       />
       <Metric
-        name="Smallest Table"
+        name="Largest Table"
         col={3}
-        sql={`SELECT '${smallestTable}' as value`}
+        sql={`SELECT '${largestTable}' as value`}
         column="value"
       />
       <Metric
-        name={`${titleCase(smallestTable)} Rows`}
+        name={`${titleCase(largestTable)} Rows`}
         col={3}
-        sql={`SELECT ${rowCounts[smallestTable] || 0} as value`}
+        sql={`SELECT ${rowCounts[largestTable] || 0} as value`}
         column="value"
         format="number"
       />

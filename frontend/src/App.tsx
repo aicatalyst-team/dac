@@ -21,7 +21,7 @@ const queryClient = new QueryClient({
 });
 
 function DashboardContent() {
-  const reloadKey = useLiveReload();
+  useLiveReload();
 
   // In static mode, skip the list and go straight to the baked dashboard.
   const home = staticPayload
@@ -31,7 +31,7 @@ function DashboardContent() {
   return (
     <Routes>
       <Route path="/" element={home} />
-      <Route path="/d/:name" element={<DashboardView key={reloadKey} />} />
+      <Route path="/d/:name" element={<DashboardView />} />
     </Routes>
   );
 }
