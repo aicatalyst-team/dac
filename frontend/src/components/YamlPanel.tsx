@@ -11,9 +11,10 @@ interface YamlPanelProps {
   onResize: (delta: number) => void;
   onResizeStart: () => void;
   onResizeEnd: () => void;
+  draftId?: string;
 }
 
-export function YamlPanel({ dashboardName, fileType, isOpen, onClose, onResize, onResizeStart, onResizeEnd }: YamlPanelProps) {
+export function YamlPanel({ dashboardName, fileType, isOpen, onClose, onResize, onResizeStart, onResizeEnd, draftId }: YamlPanelProps) {
   const [yaml, setYaml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,10 +24,10 @@ export function YamlPanel({ dashboardName, fileType, isOpen, onClose, onResize, 
   useEffect(() => {
     if (!isOpen || !dashboardName) return;
     setError(null);
-    getDashboardRaw(dashboardName)
+    getDashboardRaw(dashboardName, draftId)
       .then(setYaml)
       .catch((err) => setError(err.message));
-  }, [isOpen, dashboardName]);
+  }, [isOpen, dashboardName, draftId]);
 
   return (
     <div

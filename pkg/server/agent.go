@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -59,8 +60,136 @@ Rules:
 - Respond concisely — create the file, don't over-explain
 `
 
+// ──────────────────────────────────────────────────────────────
+// Draft management (keyed by draft ID, not agent session ID)
+// ──────────────────────────────────────────────────────────────
+
+// handleDraftCreate creates a draft copy of a dashboard file.
+// POST /api/v1/dashboards/{name}/drafts  body: {"draft_id":"abc123"}
+func (s *Server) handleDraftCreate(w http.ResponseWriter, r *http.Request) {
+	dashName := r.PathValue("name")
+
+	var req struct {
+		DraftID string `json:"draft_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DraftID == "" {
+		writeError(w, http.StatusBadRequest, "draft_id is required")
+		return
+	}
+
+	dashboards, err := s.loader.LoadMeta()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var original *dashboard.Dashboard
+	for _, d := range dashboards {
+		if d.Name == dashName {
+			original = d
+			break
+		}
+	}
+	if original == nil || original.FilePath == "" {
+		writeError(w, http.StatusNotFound, "dashboard not found: "+dashName)
+		return
+	}
+
+	// Copy live file to draft.
+	data, err := os.ReadFile(original.FilePath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reading dashboard: "+err.Error())
+		return
+	}
+
+	draftName := fmt.Sprintf(".draft.%s.%s", req.DraftID, filepath.Base(original.FilePath))
+	draftPath := filepath.Join(filepath.Dir(original.FilePath), draftName)
+	if err := os.WriteFile(draftPath, data, 0o644); err != nil {
+		writeError(w, http.StatusInternalServerError, "creating draft: "+err.Error())
+		return
+	}
+
+	draft := &DraftInfo{
+		DraftID:       req.DraftID,
+		DashboardName: dashName,
+		DraftPath:     draftPath,
+		OriginalPath:  original.FilePath,
+	}
+	s.draftsMu.Lock()
+	s.drafts[req.DraftID] = draft
+	s.draftsMu.Unlock()
+
+	log.Printf("draft: created %s for dashboard %q", draftPath, dashName)
+	writeJSON(w, http.StatusOK, map[string]string{
+		"draft_id":   req.DraftID,
+		"draft_path": draftPath,
+	})
+}
+
+// handleDraftSave copies the draft over the live file, removes the draft.
+// POST /api/v1/drafts/{id}/save
+func (s *Server) handleDraftSave(w http.ResponseWriter, r *http.Request) {
+	draftID := r.PathValue("id")
+
+	s.draftsMu.Lock()
+	draft, ok := s.drafts[draftID]
+	if ok {
+		delete(s.drafts, draftID)
+	}
+	s.draftsMu.Unlock()
+
+	if !ok || draft == nil {
+		writeError(w, http.StatusNotFound, "no draft found")
+		return
+	}
+
+	data, err := os.ReadFile(draft.DraftPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reading draft: "+err.Error())
+		return
+	}
+	if err := os.WriteFile(draft.OriginalPath, data, 0o644); err != nil {
+		writeError(w, http.StatusInternalServerError, "writing live file: "+err.Error())
+		return
+	}
+	os.Remove(draft.DraftPath)
+	log.Printf("draft: saved %s → %s", draft.DraftPath, draft.OriginalPath)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// handleDraftDiscard removes the draft file.
+// POST /api/v1/drafts/{id}/discard
+func (s *Server) handleDraftDiscard(w http.ResponseWriter, r *http.Request) {
+	draftID := r.PathValue("id")
+
+	s.draftsMu.Lock()
+	draft, ok := s.drafts[draftID]
+	if ok {
+		delete(s.drafts, draftID)
+	}
+	s.draftsMu.Unlock()
+
+	if ok && draft != nil && draft.DraftPath != "" {
+		os.Remove(draft.DraftPath)
+		log.Printf("draft: discarded %s", draft.DraftPath)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "discarded"})
+}
+
+// resolveDraft looks up a draft by ID. Returns nil if not found.
+func (s *Server) resolveDraft(draftID string) *DraftInfo {
+	s.draftsMu.RLock()
+	defer s.draftsMu.RUnlock()
+	return s.drafts[draftID]
+}
+
+// ──────────────────────────────────────────────────────────────
+// Agent session management
+// ──────────────────────────────────────────────────────────────
+
 type createSessionRequest struct {
 	Dashboard string `json:"dashboard"`
+	DraftID   string `json:"draft_id,omitempty"`
 	Model     string `json:"model,omitempty"`
 }
 
@@ -81,9 +210,14 @@ func (s *Server) handleAgentCreateSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Remember which dashboard this session is for.
+	// Remember which dashboard + draft this session is for.
 	s.sessionDashMu.Lock()
 	s.sessionDash[threadID] = req.Dashboard
+	if req.DraftID != "" {
+		// Store a mapping from session → draft ID so we can look up the draft path
+		// when building the first-turn context.
+		s.sessionDash[threadID+":draft"] = req.DraftID
+	}
 	s.sessionDashMu.Unlock()
 
 	writeJSON(w, http.StatusOK, createSessionResponse{SessionID: threadID})
@@ -109,10 +243,11 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 
 	var input []map[string]any
 
-	// On the first turn, prepend system context with the specific dashboard YAML.
+	// On the first turn, prepend system context.
 	if !s.codex.IsThreadInitialized(sessionID) {
 		s.sessionDashMu.RLock()
 		dashName := s.sessionDash[sessionID]
+		draftID := s.sessionDash[sessionID+":draft"]
 		s.sessionDashMu.RUnlock()
 
 		var prompt string
@@ -121,15 +256,27 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 		} else {
 			prompt = agentSystemPrompt
 		}
-		context := prompt + s.buildDashboardContext() + s.buildActiveDashboardContext(dashName)
+
+		// Build context telling the agent which file to edit.
+		var dashContext string
+		if draftID != "" {
+			draft := s.resolveDraft(draftID)
+			if draft != nil && draft.DraftPath != "" {
+				dashContext = fmt.Sprintf("\nThe user is currently viewing the %q dashboard. Edit the draft file at: %s\nAlways read this file before making changes.\n", dashName, draft.DraftPath)
+			}
+		}
+		if dashContext == "" && dashName != "__create__" {
+			dashContext = s.buildActiveDashboardContext(dashName)
+		}
+
+		context := prompt + s.buildDashboardContext() + dashContext
 		input = append(input, map[string]any{"type": "text", "text": context})
 		s.codex.MarkThreadInitialized(sessionID)
-		log.Printf("agent: first turn for thread %s, dashboard %q (%d bytes context)", sessionID, dashName, len(context))
+		log.Printf("agent: first turn for thread %s, dashboard %q, draft %q (%d bytes context)", sessionID, dashName, draftID, len(context))
 	}
 
 	input = append(input, map[string]any{"type": "text", "text": req.Message})
 
-	// Log the full payload for debugging.
 	payload, _ := json.Marshal(input)
 	log.Printf("agent: turn payload (%d bytes): %s", len(payload), string(payload)[:min(500, len(payload))])
 
@@ -141,9 +288,12 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// buildDashboardContext produces a summary of available dashboard files.
+// ──────────────────────────────────────────────────────────────
+// Context builders
+// ──────────────────────────────────────────────────────────────
+
 func (s *Server) buildDashboardContext() string {
-	dashboards, err := s.loader.Load()
+	dashboards, err := s.loader.LoadMeta()
 	if err != nil {
 		return fmt.Sprintf("\nDashboard directory: %s\n", s.config.DashboardDir)
 	}
@@ -167,13 +317,12 @@ func (s *Server) buildDashboardContext() string {
 	return b.String()
 }
 
-// buildActiveDashboardContext tells the agent which dashboard the user is viewing and where to find it.
 func (s *Server) buildActiveDashboardContext(dashName string) string {
 	if dashName == "" {
 		return ""
 	}
 
-	dashboards, err := s.loader.Load()
+	dashboards, err := s.loader.LoadMeta()
 	if err != nil {
 		return ""
 	}
@@ -200,7 +349,10 @@ func countWidgets(d *dashboard.Dashboard) int {
 	return n
 }
 
-// handleAgentEvents streams codex events to the frontend via SSE.
+// ──────────────────────────────────────────────────────────────
+// Agent SSE
+// ──────────────────────────────────────────────────────────────
+
 func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.PathValue("id")
 
@@ -218,7 +370,6 @@ func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 	ch := s.codex.Subscribe(sessionID)
 	defer s.codex.Unsubscribe(sessionID, ch)
 
-	// Send initial connected event.
 	fmt.Fprintf(w, "data: %s\n\n", mustJSON(map[string]string{"type": "connected"}))
 	flusher.Flush()
 
@@ -260,7 +411,10 @@ func (s *Server) handleAgentInterrupt(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "interrupted"})
 }
 
-// translateEvent converts a raw codex notification into a frontend-friendly SSE payload.
+// ──────────────────────────────────────────────────────────────
+// Event translation
+// ──────────────────────────────────────────────────────────────
+
 func translateEvent(event *codex.Event) map[string]any {
 	switch event.Method {
 	case "item/agentMessage/delta":
@@ -330,7 +484,6 @@ func translateEvent(event *codex.Event) map[string]any {
 	}
 }
 
-// parseItem extracts type-specific fields from a codex item.
 func parseItem(raw json.RawMessage) map[string]any {
 	if raw == nil {
 		return nil

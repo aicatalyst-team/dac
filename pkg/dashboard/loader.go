@@ -36,7 +36,7 @@ func LoadDir(dir string, opts ...TSXOption) ([]*Dashboard, error) {
 			}
 			dashboards = append(dashboards, d)
 
-		case isTSXFile(name):
+		case IsTSXFile(name):
 			d, err := LoadTSXFile(path, opts...)
 			if err != nil {
 				return nil, fmt.Errorf("loading %s: %w", name, err)
@@ -46,6 +46,34 @@ func LoadDir(dir string, opts ...TSXOption) ([]*Dashboard, error) {
 	}
 
 	return dashboards, nil
+}
+
+// LoadOneByName finds a dashboard by name using a two-pass approach:
+// first a cheap metadata scan (no query execution) to find the file path,
+// then a full load of just that one file. Returns nil, nil if not found.
+func LoadOneByName(dir, name string, opts ...TSXOption) (*Dashboard, error) {
+	// Pass 1: find the file path without executing queries.
+	metaDashboards, err := LoadDir(dir) // no opts = no query backend
+	if err != nil {
+		return nil, err
+	}
+
+	var filePath string
+	for _, d := range metaDashboards {
+		if d.Name == name {
+			filePath = d.FilePath
+			break
+		}
+	}
+	if filePath == "" {
+		return nil, nil
+	}
+
+	// Pass 2: load just that file with query execution if needed.
+	if IsTSXFile(filepath.Base(filePath)) {
+		return LoadTSXFile(filePath, opts...)
+	}
+	return LoadFile(filePath)
 }
 
 // LoadFile loads a single dashboard YAML file.

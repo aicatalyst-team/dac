@@ -733,7 +733,7 @@ func asTableColumns(v interface{}) []TableColumn {
 	return cols
 }
 
-// isTSXFile checks if a filename matches the .dashboard.tsx convention.
-func isTSXFile(name string) bool {
+// IsTSXFile checks if a filename matches the .dashboard.tsx convention.
+func IsTSXFile(name string) bool {
 	return strings.HasSuffix(name, ".dashboard.tsx")
 }

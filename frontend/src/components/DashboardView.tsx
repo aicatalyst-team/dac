@@ -1,9 +1,12 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDashboard } from "../hooks/useDashboard";
 import { useWidgetQuery } from "../hooks/useWidgetQuery";
 import { useTemplate } from "../themes/TemplateProvider";
 import { resolvePreset } from "../themes/bruin/FilterBar";
+import { saveDraft, discardDraft, createDraft } from "../api/client";
+import { useDraftReload } from "../hooks/useDraftReload";
 import { AgentChat } from "./AgentChat";
 import { YamlPanel } from "./YamlPanel";
 import type { Filter, Widget } from "../types/dashboard";
@@ -47,12 +50,14 @@ function DataWidget({
   widget,
   filters,
   WidgetFrame,
+  draftId,
 }: {
   dashboardName: string;
   widgetId: string;
   widget: Widget;
   filters?: Record<string, unknown>;
   WidgetFrame: React.ComponentType<WidgetFrameProps>;
+  draftId?: string;
 }) {
   // Static widgets (text, divider, image) don't need data.
   if (STATIC_WIDGET_TYPES.has(widget.type)) {
@@ -66,6 +71,7 @@ function DataWidget({
       widget={widget}
       filters={filters}
       WidgetFrame={WidgetFrame}
+      draftId={draftId}
     />
   );
 }
@@ -77,22 +83,42 @@ function DataWidgetInner({
   widget,
   filters,
   WidgetFrame,
+  draftId,
 }: {
   dashboardName: string;
   widgetId: string;
   widget: Widget;
   filters?: Record<string, unknown>;
   WidgetFrame: React.ComponentType<WidgetFrameProps>;
+  draftId?: string;
 }) {
-  const { data, isLoading } = useWidgetQuery(dashboardName, widgetId, filters);
+  const { data, isLoading } = useWidgetQuery(dashboardName, widgetId, filters, true, draftId);
   return <WidgetFrame widget={widget} data={data} isLoading={isLoading} />;
 }
 
 export function DashboardView() {
   const { name } = useParams<{ name: string }>();
   const location = useLocation();
-  const { data: dashboard, isLoading: dashLoading, error: dashError } = useDashboard(name || "");
-  const [agentOpen, _setAgentOpen] = useState(() => !!(location.state as any)?.agentOpen || _agentOpen);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const [draftId, _setDraftId] = useState<string | null>(() => searchParams.get("draft"));
+
+  // Sync draftId to/from the URL.
+  const setDraftId = useCallback((id: string | null) => {
+    _setDraftId(id);
+    setSearchParams((prev) => {
+      if (id) {
+        prev.set("draft", id);
+      } else {
+        prev.delete("draft");
+      }
+      return prev;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  useDraftReload(draftId);
+  const { data: dashboard, isLoading: dashLoading, error: dashError } = useDashboard(name || "", draftId ?? undefined);
+  const [agentOpen, _setAgentOpen] = useState(() => !!draftId || !!(location.state as any)?.agentOpen || _agentOpen);
   const [yamlOpen, _setYamlOpen] = useState(_yamlOpen);
   const [agentWidth, _setAgentWidth] = useState(_agentWidth);
   const [yamlWidth, _setYamlWidth] = useState(_yamlWidth);
@@ -135,6 +161,52 @@ export function DashboardView() {
   }, [setYamlWidth]);
   const onResizeStart = useCallback(() => setIsResizing(true), []);
   const onResizeEnd = useCallback(() => setIsResizing(false), []);
+
+  // Start editing: create a draft and open the agent sidebar.
+  const handleStartEditing = useCallback(async () => {
+    if (draftId || !name) return;
+    const id = crypto.randomUUID().slice(0, 8);
+    try {
+      await createDraft(name, id);
+      setDraftId(id);
+      setAgentOpen(true);
+    } catch (err) {
+      console.error("Failed to create draft:", err);
+    }
+  }, [draftId, name, setAgentOpen]);
+
+  // When the agent edits files, invalidate all queries so the draft preview updates.
+  const handleAgentFileChange = useCallback(() => {
+    queryClient.invalidateQueries();
+  }, [queryClient]);
+
+  // Save: apply draft to live, clear draft state.
+  const handleSave = useCallback(async () => {
+    if (!draftId) return;
+    try {
+      await saveDraft(draftId);
+      setDraftId(null);
+      // Invalidate live caches so the dashboard refreshes with the saved version.
+      queryClient.invalidateQueries({ queryKey: ["dashboard", name] });
+      queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "widget-data" && q.queryKey[1] === name });
+    } catch (err) {
+      console.error("Failed to save draft:", err);
+    }
+  }, [draftId, name, queryClient]);
+
+  // Discard: remove draft, clear draft state.
+  const handleDiscard = useCallback(async () => {
+    if (!draftId) return;
+    try {
+      await discardDraft(draftId);
+    } catch {
+      // Ignore — draft may already be cleaned up.
+    }
+    setDraftId(null);
+    // Re-fetch live dashboard.
+    queryClient.invalidateQueries({ queryKey: ["dashboard", name] });
+    queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "widget-data" && q.queryKey[1] === name });
+  }, [draftId, name, queryClient]);
 
   const defaultFilters = useMemo(
     () => dashboard ? buildDefaultFilters(dashboard) : null,
@@ -213,28 +285,43 @@ export function DashboardView() {
 
   const headerActions = isStaticMode ? null : (
     <div className="flex items-center gap-1.5">
+      {draftId && (
+        <>
+          <button
+            onClick={handleDiscard}
+            className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-muted)] hover:text-[var(--dac-error)] hover:border-[var(--dac-error)] text-[13px] transition-all duration-100"
+            title="Discard draft changes"
+          >
+            Discard
+          </button>
+          <button
+            onClick={handleSave}
+            className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border border-[var(--dac-accent)] bg-[var(--dac-accent)] text-white hover:opacity-90 text-[13px] transition-all duration-100"
+            title="Save draft to live"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12.5 2H3.5C2.67 2 2 2.67 2 3.5V12.5C2 13.33 2.67 14 3.5 14H12.5C13.33 14 14 13.33 14 12.5V5L11 2Z" />
+              <path d="M11 2V5H14" />
+              <path d="M5 10H11" />
+              <path d="M5 12H8" />
+            </svg>
+            Save
+          </button>
+        </>
+      )}
       <button
-        onClick={() => setAgentOpen(!agentOpen)}
+        onClick={draftId ? () => setAgentOpen(!agentOpen) : handleStartEditing}
         className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border text-[13px] transition-all duration-100 ${
           agentOpen
             ? "border-[var(--dac-accent)] text-[var(--dac-accent)] hover:bg-[color-mix(in_srgb,var(--dac-accent)_8%,transparent)]"
             : "border-[var(--dac-border)] bg-[var(--dac-background)] text-[var(--dac-text-secondary)] hover:text-[var(--dac-text-primary)] hover:border-[var(--dac-text-muted)] hover:bg-[var(--dac-surface-hover)]"
         }`}
-        title={agentOpen ? "Save changes" : "Edit with AI"}
+        title="Edit with AI"
       >
-        {agentOpen ? (
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12.5 2H3.5C2.67 2 2 2.67 2 3.5V12.5C2 13.33 2.67 14 3.5 14H12.5C13.33 14 14 13.33 14 12.5V5L11 2Z" />
-            <path d="M11 2V5H14" />
-            <path d="M5 10H11" />
-            <path d="M5 12H8" />
-          </svg>
-        ) : (
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z" />
-          </svg>
-        )}
-        {agentOpen ? "Save" : "Edit"}
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11.5 1.5L14.5 4.5L5 14H2V11L11.5 1.5Z" />
+        </svg>
+        Edit
       </button>
       <button
         onClick={() => setYamlOpen(!yamlOpen)}
@@ -266,6 +353,7 @@ export function DashboardView() {
           widget={widget}
           filters={activeFilters ?? undefined}
           WidgetFrame={WidgetFrame}
+          draftId={draftId ?? undefined}
         />
       </WidgetContainer>
     );
@@ -278,11 +366,13 @@ export function DashboardView() {
     >
       <AgentChat
         dashboardName={name || ""}
+        draftId={draftId ?? undefined}
         isOpen={agentOpen}
         onClose={() => setAgentOpen(false)}
         onResize={handleAgentResize}
         onResizeStart={onResizeStart}
         onResizeEnd={onResizeEnd}
+        onFileChange={handleAgentFileChange}
       />
       <div className="overflow-y-auto min-w-0">
         <DashboardLayout dashboard={dashboard} filterBar={filterBar} headerActions={headerActions}>
@@ -351,6 +441,7 @@ export function DashboardView() {
         onResize={handleYamlResize}
         onResizeStart={onResizeStart}
         onResizeEnd={onResizeEnd}
+        draftId={draftId ?? undefined}
       />
     </div>
   );

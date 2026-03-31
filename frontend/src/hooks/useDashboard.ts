@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { listDashboards, getDashboard } from "../api/client";
 
 export function useDashboardList() {
@@ -8,10 +8,11 @@ export function useDashboardList() {
   });
 }
 
-export function useDashboard(name: string) {
+export function useDashboard(name: string, draftId?: string) {
   return useQuery({
-    queryKey: ["dashboard", name],
-    queryFn: () => getDashboard(name),
+    queryKey: ["dashboard", name, draftId],
+    queryFn: () => getDashboard(name, draftId),
     enabled: !!name,
+    placeholderData: keepPreviousData,
   });
 }

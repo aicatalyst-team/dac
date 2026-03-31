@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/bruin-data/dac/pkg/dashboard"
@@ -63,7 +65,7 @@ func MakeDashboardSummary(d *dashboard.Dashboard) DashboardSummary {
 }
 
 func (s *Server) handleListDashboards(w http.ResponseWriter, r *http.Request) {
-	dashboards, err := s.loader.Load()
+	dashboards, err := s.loader.LoadMeta()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -76,28 +78,107 @@ func (s *Server) handleListDashboards(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"dashboards": summaries})
 }
 
+// resolveDashboard loads a single dashboard by name, using the draft file if ?draft=draftId is set.
+func (s *Server) resolveDashboard(name string, r *http.Request) (*dashboard.Dashboard, error) {
+	draftID := r.URL.Query().Get("draft")
+
+	if draftID != "" {
+		// Try the in-memory map first.
+		draft := s.resolveDraft(draftID)
+
+		// If not in memory (e.g. server restarted), scan the directory for a matching file.
+		if draft == nil {
+			draft = s.findDraftOnDisk(draftID, name)
+		}
+
+		if draft != nil && draft.DraftPath != "" {
+			d, err := s.loader.LoadPath(draft.DraftPath)
+			if err != nil {
+				log.Printf("draft parse error (falling back to live): %v", err)
+			} else {
+				return d, nil
+			}
+		}
+	}
+
+	return s.loader.LoadOne(name)
+}
+
+// findDraftOnDisk scans the dashboard directory for a .draft.<id>.* file
+// and re-registers it in the in-memory map. This handles server restarts.
+func (s *Server) findDraftOnDisk(draftID, dashName string) *DraftInfo {
+	prefix := ".draft." + draftID + "."
+	entries, err := os.ReadDir(s.config.DashboardDir)
+	if err != nil {
+		return nil
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) {
+			draftPath := filepath.Join(s.config.DashboardDir, e.Name())
+
+			// Find the original live file path.
+			originalName := strings.TrimPrefix(e.Name(), prefix)
+			originalPath := filepath.Join(s.config.DashboardDir, originalName)
+
+			draft := &DraftInfo{
+				DraftID:       draftID,
+				DashboardName: dashName,
+				DraftPath:     draftPath,
+				OriginalPath:  originalPath,
+			}
+			// Re-register so subsequent requests are fast.
+			s.draftsMu.Lock()
+			s.drafts[draftID] = draft
+			s.draftsMu.Unlock()
+			log.Printf("draft: recovered %s from disk", draftPath)
+			return draft
+		}
+	}
+	return nil
+}
+
 func (s *Server) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	dashboards, err := s.loader.Load()
+	d, err := s.resolveDashboard(name, r)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	for _, d := range dashboards {
-		if d.Name == name {
-			writeJSON(w, http.StatusOK, d)
-			return
-		}
+	if d == nil {
+		writeError(w, http.StatusNotFound, "dashboard not found: "+name)
+		return
 	}
-	writeError(w, http.StatusNotFound, "dashboard not found: "+name)
+	writeJSON(w, http.StatusOK, d)
 }
 
 func (s *Server) handleGetDashboardRaw(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	dashboards, err := s.loader.Load()
+	// Check for draft source first.
+	draftID := r.URL.Query().Get("draft")
+	if draftID != "" {
+		draft := s.resolveDraft(draftID)
+		if draft == nil {
+			draft = s.findDraftOnDisk(draftID, name)
+		}
+		if draft != nil && draft.DraftPath != "" {
+			data, err := os.ReadFile(draft.DraftPath)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to read draft file: "+err.Error())
+				return
+			}
+			ct := "text/yaml; charset=utf-8"
+			if strings.HasSuffix(draft.DraftPath, ".tsx") {
+				ct = "text/typescript; charset=utf-8"
+			}
+			w.Header().Set("Content-Type", ct)
+			w.Write(data)
+			return
+		}
+	}
+
+	dashboards, err := s.loader.LoadMeta()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -149,18 +230,10 @@ func (s *Server) handleBatchQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the dashboard.
-	dashboards, err := s.loader.Load()
+	d, err := s.loader.LoadOne(name)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	var d *dashboard.Dashboard
-	for _, dash := range dashboards {
-		if dash.Name == name {
-			d = dash
-			break
-		}
 	}
 	if d == nil {
 		writeError(w, http.StatusNotFound, "dashboard not found: "+name)
@@ -413,18 +486,10 @@ func (s *Server) handleStreamQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dashboards, err := s.loader.Load()
+	d, err := s.loader.LoadOne(name)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	var d *dashboard.Dashboard
-	for _, dash := range dashboards {
-		if dash.Name == name {
-			d = dash
-			break
-		}
 	}
 	if d == nil {
 		writeError(w, http.StatusNotFound, "dashboard not found: "+name)
@@ -587,18 +652,10 @@ func (s *Server) handleWidgetQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dashboards, err := s.loader.Load()
+	d, err := s.resolveDashboard(name, r)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	var d *dashboard.Dashboard
-	for _, dash := range dashboards {
-		if dash.Name == name {
-			d = dash
-			break
-		}
 	}
 	if d == nil {
 		writeError(w, http.StatusNotFound, "dashboard not found: "+name)

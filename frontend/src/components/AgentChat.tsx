@@ -29,12 +29,14 @@ interface ChatMessage {
 
 interface AgentChatProps {
   dashboardName: string;
+  draftId?: string;
   isOpen: boolean;
   onClose: () => void;
   onResize: (delta: number) => void;
   onResizeStart: () => void;
   onResizeEnd: () => void;
   onDashboardCreated?: (name: string) => void;
+  onFileChange?: () => void;
 }
 
 const THINKING_WORDS = [
@@ -71,7 +73,7 @@ function clearChat(dashboard: string) {
   localStorage.removeItem(STORAGE_KEY_PREFIX + dashboard);
 }
 
-export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeStart, onResizeEnd, onDashboardCreated }: AgentChatProps) {
+export function AgentChat({ dashboardName, draftId, isOpen, onClose, onResize, onResizeStart, onResizeEnd, onDashboardCreated, onFileChange }: AgentChatProps) {
   // Restore persisted state on mount.
   const persisted = useRef(loadChat(dashboardName));
 
@@ -82,15 +84,18 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
   const [error, setError] = useState<string | null>(null);
   const [, setTurnId] = useState<string | null>(null);
 
+  const sendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const messageIdRef = useRef(persisted.current?.nextMsgId ?? 0);
   // Tracks whether the current agentMessage has phase "final_answer".
   const finalAnswerRef = useRef(false);
-  // Stable ref for the creation callback so handleSSEEvent doesn't need it as a dep.
+  // Stable refs for callbacks so handleSSEEvent doesn't need them as deps.
   const onCreatedRef = useRef(onDashboardCreated);
   onCreatedRef.current = onDashboardCreated;
+  const onFileChangeRef = useRef(onFileChange);
+  onFileChangeRef.current = onFileChange;
 
   // Persist messages + sessionId to localStorage.
   useEffect(() => {
@@ -251,23 +256,26 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
             break;
           }
 
-          // Detect newly created dashboard files from fileChange events.
+          // Notify parent immediately on file changes so the draft preview updates.
           if (
             data.type === "item_completed" &&
             item.kind === "fileChange" &&
             item.status === "applied" &&
-            item.files?.length &&
-            onCreatedRef.current
+            item.files?.length
           ) {
-            for (const f of item.files) {
-              if (f.match(/\.(yml|yaml)$/) || f.match(/\.dashboard\.tsx$/)) {
-                const basename = f.split("/").pop() ?? "";
-                const name = basename.replace(/\.(dashboard\.tsx|yml|yaml)$/, "");
-                if (name) {
-                  // Delay slightly so the loader picks up the new file.
-                  setTimeout(() => onCreatedRef.current?.(name), 500);
+            onFileChangeRef.current?.();
+
+            // Detect newly created dashboard files for create-mode redirects.
+            if (onCreatedRef.current) {
+              for (const f of item.files) {
+                if (f.match(/\.(yml|yaml)$/) || f.match(/\.dashboard\.tsx$/)) {
+                  const basename = f.split("/").pop() ?? "";
+                  const name = basename.replace(/\.(dashboard\.tsx|yml|yaml)$/, "");
+                  if (name) {
+                    setTimeout(() => onCreatedRef.current?.(name), 500);
+                  }
+                  break;
                 }
-                break;
               }
             }
           }
@@ -309,6 +317,7 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
 
         case "turn_started": {
           setTurnId(data.turn_id as string);
+          if (sendTimeoutRef.current) { clearTimeout(sendTimeoutRef.current); sendTimeoutRef.current = null; }
           break;
         }
 
@@ -324,12 +333,12 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
   );
 
   const createSession = useCallback(async (): Promise<string> => {
-    const { session_id } = await createAgentSession(dashboardName);
+    const { session_id } = await createAgentSession(dashboardName, draftId);
     setSessionId(session_id);
     sseConnectedRef.current = true;
     connectSSE(session_id);
     return session_id;
-  }, [dashboardName, connectSSE]);
+  }, [dashboardName, draftId, connectSSE]);
 
   const handleNewChat = useCallback(() => {
     eventSourceRef.current?.close();
@@ -363,6 +372,19 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
     setMessages((prev) => [...prev, userMsg]);
     setIsStreaming(true);
 
+    // Safety timeout: if no turn_started arrives within 15s, assume the turn
+    // was silently dropped (e.g. codex still initializing) and unblock the UI.
+    if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current);
+    sendTimeoutRef.current = setTimeout(() => {
+      sendTimeoutRef.current = null;
+      setIsStreaming((current) => {
+        if (current) {
+          setError("Agent didn't respond — try sending your message again.");
+        }
+        return false;
+      });
+    }, 15000);
+
     try {
       const sid = await ensureSession();
       try {
@@ -379,6 +401,7 @@ export function AgentChat({ dashboardName, isOpen, onClose, onResize, onResizeSt
         }
       }
     } catch (err) {
+      if (sendTimeoutRef.current) { clearTimeout(sendTimeoutRef.current); sendTimeoutRef.current = null; }
       setError(err instanceof Error ? err.message : "Failed to send message");
       setIsStreaming(false);
     }

@@ -535,8 +535,8 @@ func TestIsTSXFile(t *testing.T) {
 		{"lib/kpi.tsx", false},
 	}
 	for _, tt := range tests {
-		if got := isTSXFile(tt.name); got != tt.want {
-			t.Errorf("isTSXFile(%q) = %v, want %v", tt.name, got, tt.want)
+		if got := IsTSXFile(tt.name); got != tt.want {
+			t.Errorf("IsTSXFile(%q) = %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }

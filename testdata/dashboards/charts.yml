@@ -74,7 +74,7 @@ rows:
         lines: [orders]
         sql: |
           SELECT
-            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            month,
             SUM(amount)::INTEGER AS revenue,
             COUNT(*) AS orders
           FROM sales

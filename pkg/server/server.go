@@ -30,6 +30,14 @@ type Config struct {
 	Frontend      fs.FS  // embedded frontend files, nil for dev mode
 }
 
+// DraftInfo tracks a draft copy of a dashboard.
+type DraftInfo struct {
+	DraftID       string // short random ID (e.g. "a1b2c3d4")
+	DashboardName string // original dashboard name
+	DraftPath     string // path to the draft file (dot-prefixed in dashboard dir)
+	OriginalPath  string // path to the original live file
+}
+
 // Server is the dac HTTP server.
 type Server struct {
 	config   Config
@@ -43,6 +51,10 @@ type Server struct {
 	// Maps agent session (thread) IDs to their dashboard name.
 	sessionDashMu sync.RWMutex
 	sessionDash   map[string]string
+
+	// Draft file management — keyed by draft ID (not session ID).
+	draftsMu sync.RWMutex
+	drafts   map[string]*DraftInfo // draft ID -> draft info
 }
 
 type dashboardLoader struct {
@@ -51,9 +63,35 @@ type dashboardLoader struct {
 }
 
 func (l *dashboardLoader) Load() ([]*dashboard.Dashboard, error) {
-	var opts []dashboard.TSXOption
-	if l.backend != nil {
-		opts = append(opts, dashboard.WithQueryFunc(func(connection, sql string) (map[string]interface{}, error) {
+	return dashboard.LoadDir(l.dir, l.tsxOpts()...)
+}
+
+// LoadMeta loads dashboards without executing queries — used for listing
+// where only metadata (name, description, filter/widget counts) is needed.
+func (l *dashboardLoader) LoadMeta() ([]*dashboard.Dashboard, error) {
+	return dashboard.LoadDir(l.dir)
+}
+
+// LoadOne loads a single dashboard by name. Much faster than Load() when only
+// one dashboard is needed, because it skips all other files in the directory.
+func (l *dashboardLoader) LoadOne(name string) (*dashboard.Dashboard, error) {
+	return dashboard.LoadOneByName(l.dir, name, l.tsxOpts()...)
+}
+
+// LoadPath loads a single dashboard file by path, handling both YAML and TSX.
+func (l *dashboardLoader) LoadPath(path string) (*dashboard.Dashboard, error) {
+	if dashboard.IsTSXFile(filepath.Base(path)) {
+		return dashboard.LoadTSXFile(path, l.tsxOpts()...)
+	}
+	return dashboard.LoadFile(path)
+}
+
+func (l *dashboardLoader) tsxOpts() []dashboard.TSXOption {
+	if l.backend == nil {
+		return nil
+	}
+	return []dashboard.TSXOption{
+		dashboard.WithQueryFunc(func(connection, sql string) (map[string]interface{}, error) {
 			result, err := l.backend.Execute(context.Background(), connection, sql)
 			if err != nil {
 				return nil, err
@@ -69,9 +107,8 @@ func (l *dashboardLoader) Load() ([]*dashboard.Dashboard, error) {
 				"columns": cols,
 				"rows":    result.Rows,
 			}, nil
-		}))
+		}),
 	}
-	return dashboard.LoadDir(l.dir, opts...)
 }
 
 // New creates a new server instance.
@@ -110,6 +147,7 @@ func New(cfg Config) (*Server, error) {
 		codex:       codex.New(filepath.Join(cfg.DashboardDir, ".sessions")),
 		mux:         http.NewServeMux(),
 		sessionDash: make(map[string]string),
+		drafts:      make(map[string]*DraftInfo),
 	}
 
 	s.setupRoutes()
@@ -139,6 +177,11 @@ func (s *Server) setupRoutes() {
 		s.mux.HandleFunc("DELETE /api/v1/admin/connections/{type}/{name}", s.requireAdmin(s.handleAdminDeleteConnection))
 		s.mux.HandleFunc("POST /api/v1/admin/connections/{type}/{name}/test", s.requireAdmin(s.handleAdminTestConnection))
 	}
+
+	// Draft routes.
+	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/drafts", s.handleDraftCreate)
+	s.mux.HandleFunc("POST /api/v1/drafts/{id}/save", s.handleDraftSave)
+	s.mux.HandleFunc("POST /api/v1/drafts/{id}/discard", s.handleDraftDiscard)
 
 	// Agent routes (codex-powered dashboard editor).
 	s.mux.HandleFunc("POST /api/v1/agent/sessions", s.handleAgentCreateSession)

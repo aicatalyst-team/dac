@@ -123,6 +123,7 @@ const sortedTables = tableNames.sort((a, b) => (rowCounts[b] || 0) - (rowCounts[
 const mainTables = sortedTables.slice(0, 8)
 const totalRows = Object.values(rowCounts).reduce((a, b) => a + b, 0)
 const largestTable = sortedTables[0] || "none"
+const smallestTable = sortedTables[sortedTables.length - 1] || "none"
 const tabOrder = sortedTables
 
 // ─── BUILD THE DASHBOARD ────────────────────────────────────────────────────
