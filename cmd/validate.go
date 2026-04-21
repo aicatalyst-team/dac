@@ -11,7 +11,7 @@ import (
 func validateCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "validate",
-		Usage: "Validate dashboard YAML definitions",
+		Usage: "Validate dashboard definitions and semantic model references",
 		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			dashboards, err := loadDashboards(cmd.String("dir"))

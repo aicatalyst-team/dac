@@ -22,6 +22,15 @@ var jsxTags = []string{
 // LoadTSXFile loads a single .dashboard.tsx file by transpiling it with esbuild
 // and executing it with goja to produce a Dashboard struct.
 func LoadTSXFile(path string, opts ...TSXOption) (*Dashboard, error) {
+	paths := ResolveProjectPathsForFile(path)
+	semanticModels, err := loadSemanticModels(paths)
+	if err != nil {
+		return nil, err
+	}
+	return loadTSXFileWithContext(path, paths, semanticModels, opts...)
+}
+
+func loadTSXFileWithContext(path string, paths ProjectPaths, semanticModels semanticModelSet, opts ...TSXOption) (*Dashboard, error) {
 	source, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading file: %w", err)
@@ -39,6 +48,7 @@ func LoadTSXFile(path string, opts ...TSXOption) (*Dashboard, error) {
 
 	d.FilePath = path
 	d.FileType = "tsx"
+	d.SetProjectContext(paths.RootDir, semanticModels.models, semanticModels.invalid)
 
 	// Run the same post-processing as YAML loader.
 	dir := filepath.Dir(path)
@@ -46,21 +56,7 @@ func LoadTSXFile(path string, opts ...TSXOption) (*Dashboard, error) {
 		return nil, err
 	}
 
-	// Auto-set x/y for declarative dimensional charts.
-	for i, row := range d.Rows {
-		for j, w := range row.Widgets {
-			if w.Dimension != "" && len(w.MetricRefs) > 0 {
-				if dims := d.SemanticDimensions(); dims != nil {
-					if dim, ok := dims[w.Dimension]; ok && w.X == "" {
-						d.Rows[i].Widgets[j].X = DimensionAlias(dim.Column)
-					}
-				}
-				if len(w.Y) == 0 {
-					d.Rows[i].Widgets[j].Y = w.MetricRefs
-				}
-			}
-		}
-	}
+	postProcessDashboard(d)
 
 	return d, nil
 }
@@ -171,7 +167,6 @@ func evalTSX(source, filePath string, cfg *tsxConfig) (*Dashboard, error) {
 		}
 
 		// No backend — return empty result so the file still loads.
-		fmt.Printf("[tsx] query(%q, %q): no backend, returning empty result\n", conn, sql)
 		return vm.ToValue(map[string]interface{}{
 			"columns": []interface{}{},
 			"rows":    []interface{}{},
@@ -398,6 +393,8 @@ func vnodeToDashboard(root *vnode) (*Dashboard, error) {
 		Name:        asString(root.Props["name"]),
 		Description: asString(root.Props["description"]),
 		Connection:  asString(root.Props["connection"]),
+		Model:       asString(root.Props["model"]),
+		Models:      asStringMap(root.Props["models"]),
 		Theme:       asString(root.Props["theme"]),
 	}
 
@@ -456,6 +453,13 @@ func vnodeToDashboard(root *vnode) (*Dashboard, error) {
 				SQL:        asString(child.Props["sql"]),
 				File:       asString(child.Props["file"]),
 				Connection: asString(child.Props["connection"]),
+				Model:      asString(child.Props["model"]),
+				Dimensions: asSemanticDimensionRefs(child.Props["dimensions"]),
+				Metrics:    asStringSlice(child.Props["metrics"]),
+				Filters:    asSemanticFilters(child.Props["filters"]),
+				Segments:   asStringSlice(child.Props["segments"]),
+				Sort:       asSemanticSorts(child.Props["sort"]),
+				Limit:      asInt(child.Props["limit"]),
 			}
 			d.Queries[name] = q
 
@@ -522,6 +526,7 @@ func vnodeToWidget(n *vnode) Widget {
 		SQL:        asString(n.Props["sql"]),
 		File:       asString(n.Props["file"]),
 		MetricRef:  asString(n.Props["metric"]),
+		Model:      asString(n.Props["model"]),
 		Connection: asString(n.Props["connection"]),
 
 		// Metric fields
@@ -531,9 +536,14 @@ func vnodeToWidget(n *vnode) Widget {
 		Format: asString(n.Props["format"]),
 
 		// Declarative chart fields
-		Dimension:  asString(n.Props["dimension"]),
-		MetricRefs: asStringSlice(n.Props["metrics"]),
-		Limit:      asInt(n.Props["limit"]),
+		Dimension:   asString(n.Props["dimension"]),
+		Granularity: asString(n.Props["granularity"]),
+		Dimensions:  asSemanticDimensionRefs(n.Props["dimensions"]),
+		MetricRefs:  asStringSlice(n.Props["metrics"]),
+		Filters:     asSemanticFilters(n.Props["filters"]),
+		Segments:    asStringSlice(n.Props["segments"]),
+		Sort:        asSemanticSorts(n.Props["sort"]),
+		Limit:       asInt(n.Props["limit"]),
 
 		// Chart fields
 		Chart:   asString(n.Props["chart"]),
@@ -700,6 +710,90 @@ func asStringSlice(v interface{}) []string {
 	default:
 		return nil
 	}
+}
+
+func asStringMap(v interface{}) map[string]string {
+	if v == nil {
+		return nil
+	}
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for key, value := range m {
+		out[key] = asString(value)
+	}
+	return out
+}
+
+func asSemanticDimensionRefs(v interface{}) []SemanticDimensionRef {
+	if v == nil {
+		return nil
+	}
+	raw, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]SemanticDimensionRef, 0, len(raw))
+	for _, item := range raw {
+		switch val := item.(type) {
+		case string:
+			out = append(out, SemanticDimensionRef{Name: val})
+		case map[string]interface{}:
+			out = append(out, SemanticDimensionRef{
+				Name:        asString(val["name"]),
+				Granularity: asString(val["granularity"]),
+			})
+		}
+	}
+	return out
+}
+
+func asSemanticFilters(v interface{}) []SemanticQueryFilter {
+	if v == nil {
+		return nil
+	}
+	raw, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]SemanticQueryFilter, 0, len(raw))
+	for _, item := range raw {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		out = append(out, SemanticQueryFilter{
+			Dimension:  asString(m["dimension"]),
+			Operator:   asString(m["operator"]),
+			Value:      m["value"],
+			Expression: asString(m["expression"]),
+		})
+	}
+	return out
+}
+
+func asSemanticSorts(v interface{}) []SemanticSort {
+	if v == nil {
+		return nil
+	}
+	raw, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]SemanticSort, 0, len(raw))
+	for _, item := range raw {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		out = append(out, SemanticSort{
+			Name:      asString(m["name"]),
+			Direction: asString(m["direction"]),
+		})
+	}
+	return out
 }
 
 func asMap(v interface{}) map[string]interface{} {

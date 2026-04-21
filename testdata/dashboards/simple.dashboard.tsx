@@ -9,6 +9,7 @@ const statuses = query("local_duckdb", "SELECT DISTINCT status FROM orders ORDER
 const tables = query("local_duckdb",
   "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY 1"
 )
+const regionSeries = regions.rows.length ? regions.rows.map(([r]) => r) : ["placeholder"]
 
 // Reusable KPI component
 function KPI({ name, sql, prefix, ...rest }) {
@@ -66,7 +67,7 @@ export default (
           GROUP BY 1 ORDER BY 1
         `}
         x="month"
-        y={regions.rows.map(([r]) => r)}
+        y={regionSeries}
       />
       <Chart
         name="Orders by Status"

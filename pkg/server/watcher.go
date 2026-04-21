@@ -19,27 +19,39 @@ type Invalidator interface {
 
 // Watcher monitors dashboard files for changes and broadcasts SSE events.
 type Watcher struct {
-	dir          string
+	dirs         []string
 	fsWatcher    *fsnotify.Watcher
 	clients      map[chan string]struct{}
 	mu           sync.RWMutex
 	invalidators []Invalidator
 }
 
-// NewWatcher creates a file watcher for the given directory.
-func NewWatcher(dir string) (*Watcher, error) {
+// NewWatcher creates file watchers for the given directories.
+func NewWatcher(dirs ...string) (*Watcher, error) {
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("creating file watcher: %w", err)
 	}
 
-	if err := fw.Add(dir); err != nil {
-		fw.Close()
-		return nil, fmt.Errorf("watching directory %s: %w", dir, err)
+	seen := make(map[string]struct{})
+	var watched []string
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		if err := fw.Add(dir); err != nil {
+			fw.Close()
+			return nil, fmt.Errorf("watching directory %s: %w", dir, err)
+		}
+		watched = append(watched, dir)
 	}
 
 	return &Watcher{
-		dir:       dir,
+		dirs:      watched,
 		fsWatcher: fw,
 		clients:   make(map[chan string]struct{}),
 	}, nil

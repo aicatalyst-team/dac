@@ -549,13 +549,13 @@ func TestLoadDir_MixedYAMLAndTSX(t *testing.T) {
 	dashboards, err := LoadDir("../../testdata/dashboards")
 	assertNoErr(t, err)
 
-	// Should find 4 YAML + 2 TSX = 6 dashboards.
-	if len(dashboards) != 6 {
+	// Should find 6 YAML + 2 TSX = 8 dashboards.
+	if len(dashboards) != 8 {
 		names := make([]string, len(dashboards))
 		for i, d := range dashboards {
 			names[i] = d.Name
 		}
-		t.Fatalf("expected 6 dashboards, got %d: %v", len(dashboards), names)
+		t.Fatalf("expected 8 dashboards, got %d: %v", len(dashboards), names)
 	}
 
 	// Verify TSX dashboard was loaded.
@@ -754,5 +754,33 @@ export default (
 	w := d.Rows[0].Widgets[0]
 	if w.SQL != sqlContent {
 		t.Errorf("expected SQL from file, got: %s", w.SQL)
+	}
+}
+
+func TestLoadTSXFile_ProjectSemanticDashboard(t *testing.T) {
+	d, err := LoadTSXFile("../../testdata/project/dashboards/semantic.dashboard.tsx")
+	assertNoErr(t, err)
+
+	if d.Model != "sales" {
+		t.Fatalf("expected dashboard model sales, got %q", d.Model)
+	}
+	if d.Models["sales_model"] != "sales" {
+		t.Fatalf("expected alias sales_model -> sales, got %v", d.Models)
+	}
+
+	trend := d.Rows[1].Widgets[0]
+	if trend.Granularity != "month" {
+		t.Fatalf("expected month granularity, got %q", trend.Granularity)
+	}
+	if trend.X != "order_date" {
+		t.Fatalf("expected trend x order_date, got %q", trend.X)
+	}
+
+	table := d.Rows[2].Widgets[0]
+	if table.Model != "sales_model" {
+		t.Fatalf("expected table model alias, got %q", table.Model)
+	}
+	if len(table.Dimensions) != 1 || table.Dimensions[0].Name != "country" {
+		t.Fatalf("expected semantic table dimensions, got %+v", table.Dimensions)
 	}
 }

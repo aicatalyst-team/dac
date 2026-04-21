@@ -53,9 +53,9 @@ func gaSource() *dashboard.Source {
 
 func gaMetrics() map[string]dashboard.Metric {
 	return map[string]dashboard.Metric{
-		"page_views": {Aggregate: "count", Filter: map[string]string{"event_name": "page_view"}},
-		"users":      {Aggregate: "count_distinct", Column: "user_pseudo_id"},
-		"sessions":   {Aggregate: "count", Filter: map[string]string{"event_name": "session_start"}},
+		"page_views":        {Aggregate: "count", Filter: map[string]string{"event_name": "page_view"}},
+		"users":             {Aggregate: "count_distinct", Column: "user_pseudo_id"},
+		"sessions":          {Aggregate: "count", Filter: map[string]string{"event_name": "session_start"}},
 		"pages_per_session": {Expression: "page_views / sessions"},
 	}
 }
@@ -293,8 +293,8 @@ func TestResolveWidgetJobs_MixedWidgetTypes(t *testing.T) {
 		t.Fatalf("expected 3 jobs, got %d", len(jobs))
 	}
 	// Non-metric jobs come first, then the merged metrics job.
-	assertEqual(t, jobs[0].ID, "r1-w0") // chart
-	assertEqual(t, jobs[1].ID, "r1-w1") // table
+	assertEqual(t, jobs[0].ID, "r1-w0")      // chart
+	assertEqual(t, jobs[1].ID, "r1-w1")      // table
 	assertEqual(t, jobs[2].ID, MetricsJobID) // merged metrics
 }
 
@@ -328,7 +328,7 @@ func TestResolveWidgetJobs_DateFilterPassedToDeclarative(t *testing.T) {
 		Name:       "test",
 		Connection: "conn",
 		Semantic: &dashboard.SemanticLayer{
-			Source:  &dashboard.Source{Table: "events", DateColumn: "event_date"},
+			Source: &dashboard.Source{Table: "events", DateColumn: "event_date"},
 			Metrics: map[string]dashboard.Metric{
 				"total": {Aggregate: "count"},
 			},
@@ -410,6 +410,30 @@ func TestResolveWidgetJobs_SourceConnectionOverride(t *testing.T) {
 	assertEqual(t, jobs[0].Connection, "source-conn")
 }
 
+func TestResolveWidgetJobs_ExternalSemanticProjectDashboard(t *testing.T) {
+	d, err := dashboard.LoadFile("../../testdata/project/dashboards/semantic-sales.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := ResolveWidgetJobs(d, map[string]any{"country": "CA"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 6 {
+		t.Fatalf("expected 6 jobs, got %d", len(jobs))
+	}
+
+	assertContains(t, jobs[0].SQL, "sum(amount) AS revenue")
+	assertContains(t, jobs[1].SQL, "avg_order_value")
+	assertContains(t, jobs[1].SQL, "country = 'CA'")
+	assertContains(t, jobs[3].SQL, "date_trunc('month', order_date) AS order_date")
+	assertContains(t, jobs[3].SQL, "ORDER BY order_date ASC")
+	assertContains(t, jobs[4].SQL, "status = 'completed'")
+	assertContains(t, jobs[4].SQL, "LIMIT 5")
+	assertContains(t, jobs[5].SQL, "count(distinct order_id) AS order_count")
+}
+
 // ---------------------------------------------------------------------------
 // Integration tests — batch endpoint with Google Analytics dashboard
 // ---------------------------------------------------------------------------
@@ -457,9 +481,9 @@ func TestBatchQuery_GoogleAnalyticsDashboard(t *testing.T) {
 	// 4 metrics (row 0) + 2 dimensional charts (row 1) + 3 charts (row 2) + 1 table (row 3)
 	expectedWidgets := []string{
 		"r0-w0", "r0-w1", "r0-w2", "r0-w3", // metrics
-		"r1-w0", "r1-w1",                     // dimensional charts
-		"r2-w0", "r2-w1", "r2-w2",            // charts (1 SQL, 2 dimensional)
-		"r3-w0",                               // table
+		"r1-w0", "r1-w1", // dimensional charts
+		"r2-w0", "r2-w1", "r2-w2", // charts (1 SQL, 2 dimensional)
+		"r3-w0", // table
 	}
 
 	if len(resp.Widgets) != len(expectedWidgets) {
@@ -533,7 +557,7 @@ func TestStreamQuery_GoogleAnalyticsDashboard(t *testing.T) {
 	widgetIDs := make(map[string]bool)
 	for _, line := range lines {
 		var msg struct {
-			ID   string            `json:"id"`
+			ID   string             `json:"id"`
 			Data *WidgetQueryResult `json:"data"`
 		}
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
@@ -592,6 +616,48 @@ func TestBatchQuery_RegularDashboard(t *testing.T) {
 		if wr.Error != "" {
 			t.Errorf("widget %q has error: %s", id, wr.Error)
 		}
+	}
+}
+
+func TestBatchQuery_ProjectSemanticDashboard(t *testing.T) {
+	mock := &mockBackend{
+		result: &query.QueryResult{
+			Columns: []query.ColumnInfo{{Name: "value"}},
+			Rows:    [][]any{{100}},
+		},
+	}
+	s := &Server{
+		backend: mock,
+		paths:   dashboard.ResolveProjectPaths("../../testdata/project"),
+		loader:  &dashboardLoader{dir: "../../testdata/project"},
+	}
+	s.mux = http.NewServeMux()
+	s.mux.HandleFunc("POST /api/v1/dashboards/{name}/data", s.handleBatchQuery)
+
+	body := `{"filters":{"country":"CA"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dashboards/Semantic%20Sales/data", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	assertEqual(t, w.Code, http.StatusOK)
+
+	var resp struct {
+		Widgets map[string]*WidgetQueryResult `json:"widgets"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(resp.Widgets) != 6 {
+		t.Fatalf("expected 6 widgets, got %d", len(resp.Widgets))
+	}
+	if len(mock.calls) != 6 {
+		t.Fatalf("expected 6 backend calls, got %d", len(mock.calls))
+	}
+	for _, call := range mock.calls {
+		assertNotContains(t, call.SQL, "{{")
+		assertNotContains(t, call.SQL, "{%")
 	}
 }
 

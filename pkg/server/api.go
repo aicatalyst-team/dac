@@ -108,17 +108,17 @@ func (s *Server) resolveDashboard(name string, r *http.Request) (*dashboard.Dash
 // and re-registers it in the in-memory map. This handles server restarts.
 func (s *Server) findDraftOnDisk(draftID, dashName string) *DraftInfo {
 	prefix := ".draft." + draftID + "."
-	entries, err := os.ReadDir(s.config.DashboardDir)
+	entries, err := os.ReadDir(s.paths.DashboardDir)
 	if err != nil {
 		return nil
 	}
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), prefix) {
-			draftPath := filepath.Join(s.config.DashboardDir, e.Name())
+			draftPath := filepath.Join(s.paths.DashboardDir, e.Name())
 
 			// Find the original live file path.
 			originalName := strings.TrimPrefix(e.Name(), prefix)
-			originalPath := filepath.Join(s.config.DashboardDir, originalName)
+			originalPath := filepath.Join(s.paths.DashboardDir, originalName)
 
 			draft := &DraftInfo{
 				DraftID:       draftID,
@@ -362,6 +362,17 @@ func ResolveWidgetJobs(d *dashboard.Dashboard, filters map[string]any) ([]Widget
 
 			var sql, conn string
 			var err error
+
+			if semanticJob, handled, err := d.ResolveWidgetSemanticJob(&widget); err != nil {
+				return nil, fmt.Errorf("widget %q: %w", widget.Name, err)
+			} else if handled {
+				sql, conn, err = compileSemanticJob(semanticJob, filters)
+				if err != nil {
+					return nil, fmt.Errorf("widget %q: %w", widget.Name, err)
+				}
+				jobs = append(jobs, WidgetJob{ID: WidgetID(i, j), SQL: sql, Connection: conn})
+				continue
+			}
 
 			switch {
 			case widget.MetricRef != "" && d.SemanticSource() != nil:

@@ -204,7 +204,7 @@ func (s *Server) handleAgentCreateSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	threadID, err := s.codex.StartThread(s.config.DashboardDir, req.Model)
+	threadID, err := s.codex.StartThread(s.paths.DashboardDir, req.Model)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to start agent session: "+err.Error())
 		return
@@ -295,16 +295,16 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 func (s *Server) buildDashboardContext() string {
 	dashboards, err := s.loader.LoadMeta()
 	if err != nil {
-		return fmt.Sprintf("\nDashboard directory: %s\n", s.config.DashboardDir)
+		return fmt.Sprintf("\nDashboard directory: %s\n", s.paths.DashboardDir)
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("\nDashboard directory: %s\n", s.config.DashboardDir))
+	b.WriteString(fmt.Sprintf("\nDashboard directory: %s\n", s.paths.DashboardDir))
 	b.WriteString("Available dashboards:\n")
 	for _, d := range dashboards {
 		fp := d.FilePath
 		if fp == "" {
-			fp = filepath.Join(s.config.DashboardDir, d.Name+".yml")
+			fp = filepath.Join(s.paths.DashboardDir, d.Name+".yml")
 		}
 		b.WriteString(fmt.Sprintf("- %s → %s", d.Name, fp))
 		if d.Description != "" {

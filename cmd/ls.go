@@ -15,7 +15,7 @@ func lsCmd() *cli.Command {
 		Usage: "List discovered dashboards",
 		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			dashboards, err := loadDashboards(cmd.String("dir"))
+			dashboards, err := loadValidatedDashboards(cmd.String("dir"))
 			if err != nil {
 				return err
 			}

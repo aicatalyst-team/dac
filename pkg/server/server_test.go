@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -42,8 +44,8 @@ func TestListDashboards(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	// 3 YAML + 2 TSX = 5
-	assertEqual(t, len(resp.Dashboards), 5)
+	// 6 YAML + 2 TSX = 8
+	assertEqual(t, len(resp.Dashboards), 8)
 }
 
 func TestGetDashboard(t *testing.T) {
@@ -126,4 +128,52 @@ func TestListThemes(t *testing.T) {
 	if len(resp.Themes) == 0 {
 		t.Error("expected at least one theme")
 	}
+}
+
+func TestNew_AllowsRegularDashboardsWithInvalidSemanticModels(t *testing.T) {
+	projectDir := t.TempDir()
+
+	dashboardsDir := filepath.Join(projectDir, "dashboards")
+	semanticDir := filepath.Join(projectDir, "semantic")
+	if err := os.MkdirAll(dashboardsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(semanticDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	regularDashboard := `name: Regular Dashboard
+rows:
+  - widgets:
+      - name: Notes
+        type: text
+        content: Hello
+`
+	invalidModel := `name: broken_sales
+metrics:
+  - name: revenue
+    expression: sum(amount)
+`
+
+	if err := os.WriteFile(filepath.Join(dashboardsDir, "regular.yml"), []byte(regularDashboard), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(semanticDir, "broken-sales.yml"), []byte(invalidModel), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := New(Config{
+		DashboardDir: projectDir,
+		TemplateName: "bruin",
+		Port:         0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/dashboards", nil)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, req)
+
+	assertEqual(t, w.Code, http.StatusOK)
 }

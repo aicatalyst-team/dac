@@ -1,0 +1,91 @@
+name: Semantic Sales
+description: External semantic-model dashboard
+connection: warehouse
+model: sales
+models:
+  sales_model: sales
+
+filters:
+  - name: country
+    type: select
+    default: US
+    options:
+      values: [US, CA]
+
+queries:
+  completed_by_country:
+    model: sales_model
+    dimensions:
+      - name: country
+    metrics: [revenue]
+    segments: [completed]
+    sort:
+      - name: revenue
+        direction: desc
+    limit: 5
+
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        metric: revenue
+        col: 4
+
+      - name: Average Order Value
+        type: metric
+        metric: avg_order_value
+        filters:
+          - dimension: country
+            operator: equals
+            value: "{{ filters.country }}"
+        col: 4
+
+      - name: Completed Revenue
+        type: metric
+        metric: completed_revenue
+        col: 4
+
+  - widgets:
+      - name: Revenue Trend
+        type: chart
+        chart: line
+        dimension: order_date
+        granularity: month
+        metrics: [revenue]
+        filters:
+          - dimension: country
+            operator: equals
+            value: "{{ filters.country }}"
+        sort:
+          - name: order_date
+            direction: asc
+        col: 8
+
+      - name: Completed By Country
+        type: chart
+        chart: bar
+        query: completed_by_country
+        col: 4
+
+  - widgets:
+      - name: Country Table
+        type: table
+        model: sales_model
+        dimensions:
+          - name: country
+        metrics: [revenue, order_count]
+        filters:
+          - dimension: country
+            operator: equals
+            value: "{{ filters.country }}"
+        sort:
+          - name: revenue
+            direction: desc
+        limit: 10
+        columns:
+          - name: country
+            label: Country
+          - name: revenue
+            label: Revenue
+          - name: order_count
+            label: Orders

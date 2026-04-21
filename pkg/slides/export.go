@@ -47,6 +47,9 @@ func Export(ctx context.Context, cfg Config) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("loading dashboards: %w", err)
 	}
+	if err := dashboard.ValidateAll(dashboards); err != nil {
+		return "", fmt.Errorf("validating dashboards: %w", err)
+	}
 	d := dashboard.FindByName(dashboards, cfg.Dashboard)
 	if d == nil {
 		return "", fmt.Errorf("dashboard not found: %q", cfg.Dashboard)
@@ -449,8 +452,8 @@ func styledTextBox(id, pageID, text string, x, y, w, h int64, fontSize float64, 
 		},
 		{
 			UpdateParagraphStyle: &slidesapi.UpdateParagraphStyleRequest{
-				ObjectId: id,
-				Style:    &slidesapi.ParagraphStyle{Alignment: align},
+				ObjectId:  id,
+				Style:     &slidesapi.ParagraphStyle{Alignment: align},
 				TextRange: &slidesapi.Range{Type: "ALL"},
 				Fields:    "alignment",
 			},

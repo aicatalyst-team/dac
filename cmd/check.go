@@ -8,22 +8,20 @@ import (
 
 	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/bruin-data/dac/pkg/query"
-	tmpl "github.com/bruin-data/dac/pkg/template"
+	"github.com/bruin-data/dac/pkg/server"
 	"github.com/urfave/cli/v3"
 )
 
 type checkJob struct {
-	widgetName string
-	sql        string
-	connection string
+	job server.WidgetJob
 }
 
 type checkResult struct {
-	widgetName string
-	rows       int
-	cols       int
-	elapsed    time.Duration
-	err        error
+	widgetID string
+	rows     int
+	cols     int
+	elapsed  time.Duration
+	err      error
 }
 
 func checkCmd() *cli.Command {
@@ -72,56 +70,46 @@ func checkCmd() *cli.Command {
 				defaults := d.DefaultFilters()
 
 				// Collect jobs, tracking text widgets separately (no query needed).
-				var textWidgets []string
-				connGroups := make(map[string][]checkJob)
+				var passiveWidgets []string
+				widgetNames := make(map[string]string)
 
-				for _, row := range d.Rows {
-					for _, w := range row.Widgets {
+				for rowIdx, row := range d.Rows {
+					for widgetIdx, w := range row.Widgets {
 						totalWidgets++
+						widgetID := server.WidgetID(rowIdx, widgetIdx)
+						widgetNames[widgetID] = w.Name
 
-						if w.Type == dashboard.WidgetTypeText {
-							textWidgets = append(textWidgets, w.Name)
+						if w.Type == dashboard.WidgetTypeText || w.Type == dashboard.WidgetTypeDivider || w.Type == dashboard.WidgetTypeImage {
+							passiveWidgets = append(passiveWidgets, w.Name)
 							continue
 						}
-
-						sql, conn, err := w.ResolvedQuery(d)
-						if err != nil {
-							fmt.Printf("  ✗ %-30s  %s\n", w.Name, err)
-							totalErrors++
-							continue
-						}
-
-						if len(defaults) > 0 {
-							sql, err = tmpl.Render(sql, defaults)
-							if err != nil {
-								fmt.Printf("  ✗ %-30s  template error: %s\n", w.Name, err)
-								totalErrors++
-								continue
-							}
-						}
-
-						connGroups[conn] = append(connGroups[conn], checkJob{
-							widgetName: w.Name,
-							sql:        sql,
-							connection: conn,
-						})
 					}
 				}
 
-				// Print text widgets.
-				for _, name := range textWidgets {
-					fmt.Printf("  ✓ %-30s  text\n", name)
+				for _, name := range passiveWidgets {
+					fmt.Printf("  ✓ %-30s  static\n", name)
 				}
 
-				// Execute query groups in parallel (same connection sequential).
-				results := executeCheckJobs(ctx, backend, connGroups)
+				jobs, err := server.ResolveWidgetJobs(d, defaults)
+				if err != nil {
+					fmt.Printf("  ✗ query resolution failed: %s\n", err)
+					totalErrors++
+					continue
+				}
+				connGroups := make(map[string][]checkJob)
+				for _, job := range jobs {
+					connGroups[job.Connection] = append(connGroups[job.Connection], checkJob{job: job})
+				}
+
+				results := executeCheckJobs(ctx, backend, connGroups, d)
 				for _, r := range results {
+					name := widgetNames[r.widgetID]
 					if r.err != nil {
-						fmt.Printf("  ✗ %-30s  %s\n", r.widgetName, r.err)
+						fmt.Printf("  ✗ %-30s  %s\n", name, r.err)
 						totalErrors++
 					} else {
 						fmt.Printf("  ✓ %-30s  %d rows, %d cols  (%dms)\n",
-							r.widgetName, r.rows, r.cols, r.elapsed.Milliseconds())
+							name, r.rows, r.cols, r.elapsed.Milliseconds())
 					}
 				}
 			}
@@ -141,7 +129,7 @@ func checkCmd() *cli.Command {
 
 // executeCheckJobs runs query jobs grouped by connection. Same connection runs
 // sequentially (avoids file lock contention), different connections in parallel.
-func executeCheckJobs(ctx context.Context, backend query.Backend, connGroups map[string][]checkJob) []checkResult {
+func executeCheckJobs(ctx context.Context, backend query.Backend, connGroups map[string][]checkJob, d *dashboard.Dashboard) []checkResult {
 	var allResults []checkResult
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -152,17 +140,21 @@ func executeCheckJobs(ctx context.Context, backend query.Backend, connGroups map
 			defer wg.Done()
 			for _, j := range jobs {
 				start := time.Now()
-				qr, err := backend.Execute(ctx, j.connection, j.sql)
+				wr := server.ExecuteWidgetQuery(ctx, backend, j.job)
 				elapsed := time.Since(start)
 
-				r := checkResult{widgetName: j.widgetName, elapsed: elapsed, err: err}
-				if err == nil {
-					r.rows = len(qr.Rows)
-					r.cols = len(qr.Columns)
+				var results []checkResult
+				if j.job.MetricFanout != nil {
+					for wid, metricRef := range j.job.MetricFanout {
+						fanned := server.FanoutSingleMetric(wr, metricRef, j.job.SQL, d)
+						results = append(results, widgetResultToCheckResult(wid, fanned, elapsed))
+					}
+				} else {
+					results = append(results, widgetResultToCheckResult(j.job.ID, wr, elapsed))
 				}
 
 				mu.Lock()
-				allResults = append(allResults, r)
+				allResults = append(allResults, results...)
 				mu.Unlock()
 			}
 		}(jobs)
@@ -170,4 +162,18 @@ func executeCheckJobs(ctx context.Context, backend query.Backend, connGroups map
 
 	wg.Wait()
 	return allResults
+}
+
+func widgetResultToCheckResult(widgetID string, wr *server.WidgetQueryResult, elapsed time.Duration) checkResult {
+	r := checkResult{
+		widgetID: widgetID,
+		elapsed:  elapsed,
+	}
+	if wr.Error != "" {
+		r.err = fmt.Errorf("%s", wr.Error)
+		return r
+	}
+	r.rows = len(wr.Rows)
+	r.cols = len(wr.Columns)
+	return r
 }

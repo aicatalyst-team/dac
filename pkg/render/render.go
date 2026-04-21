@@ -21,7 +21,7 @@ import (
 // Config holds the configuration for a static build.
 type Config struct {
 	DashboardDir string
-	Dashboard    string         // dashboard name
+	Dashboard    string // dashboard name
 	OutputDir    string
 	Filters      map[string]any // filter overrides (merged over defaults)
 	TemplateName string
@@ -34,10 +34,15 @@ type Config struct {
 // The output contains the React SPA with query results baked into index.html
 // via a window.__DAC_STATIC__ payload.
 func Build(ctx context.Context, cfg Config) error {
+	paths := dashboard.ResolveProjectPaths(cfg.DashboardDir)
+
 	// Load dashboards.
 	dashboards, err := dashboard.LoadDir(cfg.DashboardDir)
 	if err != nil {
 		return fmt.Errorf("loading dashboards: %w", err)
+	}
+	if err := dashboard.ValidateAll(dashboards); err != nil {
+		return fmt.Errorf("validating dashboards: %w", err)
 	}
 
 	// Find the target dashboard.
@@ -69,9 +74,10 @@ func Build(ctx context.Context, cfg Config) error {
 		themes.Add(t)
 		templateName = t.Name
 	}
-	themesDir := filepath.Join(cfg.DashboardDir, "themes")
-	if err := themes.LoadUserThemes(themesDir); err != nil {
-		log.Printf("Warning: could not load user themes: %v", err)
+	if paths.ThemesDir != "" {
+		if err := themes.LoadUserThemes(paths.ThemesDir); err != nil {
+			log.Printf("Warning: could not load user themes: %v", err)
+		}
 	}
 
 	// Build config payload.

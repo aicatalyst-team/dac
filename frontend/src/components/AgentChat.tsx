@@ -420,7 +420,7 @@ export function AgentChat({ dashboardName, draftId, isOpen, onClose, onResize, o
     >
       {isOpen && <ResizeHandle side="right" onResize={onResize} onResizeStart={onResizeStart} onResizeEnd={onResizeEnd} />}
       {/* Header actions */}
-      <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
+      <div className="shrink-0 flex min-h-10 items-center justify-end gap-1 px-3 pt-2 pb-1">
         {messages.length > 0 && (
           <button
             onClick={handleNewChat}
@@ -437,6 +437,7 @@ export function AgentChat({ dashboardName, draftId, isOpen, onClose, onResize, o
         <button
           onClick={onClose}
           className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--dac-surface-hover)] text-[var(--dac-text-muted)] hover:text-[var(--dac-text-secondary)] transition-colors"
+          title="Close chat"
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
             <path d="M4 4L12 12M12 4L4 12" />

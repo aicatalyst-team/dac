@@ -147,7 +147,7 @@ rows:
         column: value
         format: number
         col: 2
-      - name: Avg Order Value
+      - name: Average Order Value
         type: metric
         query: average_order_value
         column: value

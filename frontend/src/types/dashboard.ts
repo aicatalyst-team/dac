@@ -11,6 +11,8 @@ export interface Dashboard {
   name: string;
   description?: string;
   connection?: string;
+  model?: string;
+  models?: Record<string, string>;
   theme?: string;
   refresh?: { interval: string };
   filters?: Filter[];
@@ -36,6 +38,13 @@ export interface Query {
   sql?: string;
   file?: string;
   connection?: string;
+  model?: string;
+  dimensions?: SemanticDimensionRef[];
+  metrics?: string[];
+  filters?: SemanticQueryFilter[];
+  segments?: string[];
+  sort?: SemanticSort[];
+  limit?: number;
 }
 
 export interface Row {
@@ -55,11 +64,17 @@ export interface Widget {
   sql?: string;
   file?: string;
   connection?: string;
+  model?: string;
 
   // Declarative metric/dimensional
   metric?: string;
   dimension?: string;
+  granularity?: string;
+  dimensions?: SemanticDimensionRef[];
   metrics?: string[];
+  filters?: SemanticQueryFilter[];
+  segments?: string[];
+  sort?: SemanticSort[];
 
   // Metric
   column?: string;
@@ -97,6 +112,23 @@ export interface TableColumn {
   name: string;
   label?: string;
   format?: string;
+}
+
+export interface SemanticDimensionRef {
+  name: string;
+  granularity?: string;
+}
+
+export interface SemanticQueryFilter {
+  dimension?: string;
+  operator?: "equals" | "not_equals" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "between" | "is_null" | "is_not_null";
+  value?: unknown;
+  expression?: string;
+}
+
+export interface SemanticSort {
+  name: string;
+  direction?: "asc" | "desc";
 }
 
 export interface WidgetData {

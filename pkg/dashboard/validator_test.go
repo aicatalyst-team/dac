@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -109,6 +111,76 @@ func TestValidate_ChartWidgetMissingChartType(t *testing.T) {
 	err := Validate(d)
 	assertErr(t, err)
 	assertValidationContains(t, err, "chart type is required")
+}
+
+func TestValidate_ProjectSemanticDashboard(t *testing.T) {
+	d, err := LoadFile("../../testdata/project/dashboards/semantic-sales.yml")
+	assertNoErr(t, err)
+
+	err = Validate(d)
+	assertNoErr(t, err)
+}
+
+func TestValidate_ProjectSemanticDashboardMissingModel(t *testing.T) {
+	d, err := LoadFile("../../testdata/project/dashboards/semantic-sales.yml")
+	assertNoErr(t, err)
+
+	d.Model = "missing_model"
+	err = Validate(d)
+	assertErr(t, err)
+	assertValidationContains(t, err, "semantic model \"missing_model\" not found")
+}
+
+func TestValidate_InvalidExternalSemanticModelOnlyFailsReferencedDashboard(t *testing.T) {
+	projectDir := t.TempDir()
+
+	dashboardsDir := filepath.Join(projectDir, "dashboards")
+	semanticDir := filepath.Join(projectDir, "semantic")
+	assertNoErr(t, os.MkdirAll(dashboardsDir, 0o755))
+	assertNoErr(t, os.MkdirAll(semanticDir, 0o755))
+
+	regularDashboard := `name: Regular Dashboard
+rows:
+  - widgets:
+      - name: Notes
+        type: text
+        content: Hello
+`
+	semanticDashboard := `name: Semantic Dashboard
+model: broken_sales
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        metric: revenue
+`
+	invalidModel := `name: broken_sales
+metrics:
+  - name: revenue
+    expression: sum(amount)
+`
+
+	assertNoErr(t, os.WriteFile(filepath.Join(dashboardsDir, "regular.yml"), []byte(regularDashboard), 0o644))
+	assertNoErr(t, os.WriteFile(filepath.Join(dashboardsDir, "semantic.yml"), []byte(semanticDashboard), 0o644))
+	assertNoErr(t, os.WriteFile(filepath.Join(semanticDir, "broken-sales.yml"), []byte(invalidModel), 0o644))
+
+	dashboards, err := LoadDir(projectDir)
+	assertNoErr(t, err)
+
+	regular := FindByName(dashboards, "Regular Dashboard")
+	if regular == nil {
+		t.Fatal("expected regular dashboard to load")
+	}
+	assertNoErr(t, Validate(regular))
+
+	semanticDash := FindByName(dashboards, "Semantic Dashboard")
+	if semanticDash == nil {
+		t.Fatal("expected semantic dashboard to load")
+	}
+
+	err = Validate(semanticDash)
+	assertErr(t, err)
+	assertValidationContains(t, err, `semantic model "broken_sales" is invalid`)
 }
 
 // ---------------------------------------------------------------------------

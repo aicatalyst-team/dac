@@ -60,6 +60,23 @@ interface SemanticDimensionProps {
   type?: "date";
 }
 
+interface SemanticDimensionRefProps {
+  name: string;
+  granularity?: string;
+}
+
+interface SemanticQueryFilterProps {
+  dimension?: string;
+  operator?: "equals" | "not_equals" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "between" | "is_null" | "is_not_null";
+  value?: unknown;
+  expression?: string;
+}
+
+interface SemanticSortProps {
+  name: string;
+  direction?: "asc" | "desc";
+}
+
 interface TableColumnDef {
   name: string;
   label?: string;
@@ -72,6 +89,8 @@ declare namespace JSX {
       name: string;
       description?: string;
       connection?: string;
+      model?: string;
+      models?: Record<string, string>;
       theme?: string;
       refresh?: { interval: string };
       children?: any;
@@ -95,6 +114,13 @@ declare namespace JSX {
       sql?: string;
       file?: string;
       connection?: string;
+      model?: string;
+      dimensions?: SemanticDimensionRefProps[];
+      metrics?: string[];
+      filters?: SemanticQueryFilterProps[];
+      segments?: string[];
+      sort?: SemanticSortProps[];
+      limit?: number;
     };
 
     Semantic: {
@@ -111,6 +137,9 @@ declare namespace JSX {
       file?: string;
       connection?: string;
       metric?: string;
+      model?: string;
+      filters?: SemanticQueryFilterProps[];
+      segments?: string[];
       column?: string;
       prefix?: string;
       suffix?: string;
@@ -125,6 +154,7 @@ declare namespace JSX {
       query?: string;
       file?: string;
       connection?: string;
+      model?: string;
       x?: string;
       y?: string[];
       label?: string;
@@ -138,7 +168,12 @@ declare namespace JSX {
       yMin?: string;
       yMax?: string;
       dimension?: string;
+      granularity?: string;
+      dimensions?: SemanticDimensionRefProps[];
       metrics?: string[];
+      filters?: SemanticQueryFilterProps[];
+      segments?: string[];
+      sort?: SemanticSortProps[];
       limit?: number;
     };
 
@@ -149,6 +184,13 @@ declare namespace JSX {
       query?: string;
       file?: string;
       connection?: string;
+      model?: string;
+      dimensions?: SemanticDimensionRefProps[];
+      metrics?: string[];
+      filters?: SemanticQueryFilterProps[];
+      segments?: string[];
+      sort?: SemanticSortProps[];
+      limit?: number;
       columns?: TableColumnDef[];
     };
 

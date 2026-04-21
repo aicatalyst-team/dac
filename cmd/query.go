@@ -11,7 +11,7 @@ import (
 
 	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/bruin-data/dac/pkg/query"
-	tmpl "github.com/bruin-data/dac/pkg/template"
+	"github.com/bruin-data/dac/pkg/server"
 	"github.com/urfave/cli/v3"
 )
 
@@ -106,31 +106,42 @@ func resolveWidgetQuery(dir, dashboardName, widgetName string) (string, string, 
 	if d == nil {
 		return "", "", fmt.Errorf("dashboard %q not found", dashboardName)
 	}
+	if err := dashboard.Validate(d); err != nil {
+		return "", "", fmt.Errorf("dashboard validation failed: %w", err)
+	}
 
-	for _, row := range d.Rows {
-		for _, w := range row.Widgets {
+	var widgetID string
+	for i, row := range d.Rows {
+		for j, w := range row.Widgets {
 			if w.Name != widgetName {
 				continue
 			}
-
-			sql, conn, err := w.ResolvedQuery(d)
-			if err != nil {
-				return "", "", fmt.Errorf("resolving query: %w", err)
-			}
-
-			defaults := d.DefaultFilters()
-			if len(defaults) > 0 {
-				sql, err = tmpl.Render(sql, defaults)
-				if err != nil {
-					return "", "", fmt.Errorf("templating query: %w", err)
-				}
-			}
-
-			return sql, conn, nil
+			widgetID = server.WidgetID(i, j)
+			break
 		}
 	}
 
-	return "", "", fmt.Errorf("widget %q not found in dashboard %q", widgetName, dashboardName)
+	if widgetID == "" {
+		return "", "", fmt.Errorf("widget %q not found in dashboard %q", widgetName, dashboardName)
+	}
+
+	jobs, err := server.ResolveWidgetJobs(d, d.DefaultFilters())
+	if err != nil {
+		return "", "", fmt.Errorf("resolving widget jobs: %w", err)
+	}
+
+	for _, job := range jobs {
+		if job.ID == widgetID {
+			return job.SQL, job.Connection, nil
+		}
+		if job.MetricFanout != nil {
+			if _, ok := job.MetricFanout[widgetID]; ok {
+				return job.SQL, job.Connection, nil
+			}
+		}
+	}
+
+	return "", "", fmt.Errorf("widget %q did not produce a query", widgetName)
 }
 
 func printResult(result *query.QueryResult, format string) error {

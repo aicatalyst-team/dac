@@ -40,13 +40,14 @@ type DraftInfo struct {
 
 // Server is the dac HTTP server.
 type Server struct {
-	config   Config
-	backend  query.Backend
-	themes   *theme.Registry
-	loader   *dashboardLoader
-	watcher  *Watcher
-	codex    *codex.Process
-	mux      *http.ServeMux
+	config  Config
+	paths   dashboard.ProjectPaths
+	backend query.Backend
+	themes  *theme.Registry
+	loader  *dashboardLoader
+	watcher *Watcher
+	codex   *codex.Process
+	mux     *http.ServeMux
 
 	// Maps agent session (thread) IDs to their dashboard name.
 	sessionDashMu sync.RWMutex
@@ -120,6 +121,7 @@ func New(cfg Config) (*Server, error) {
 	cachedBackend := query.NewCachedBackend(backend, 5*60*1e9) // 5 min default TTL
 
 	themes := theme.NewRegistry()
+	paths := dashboard.ResolveProjectPaths(cfg.DashboardDir)
 
 	// If --template points to a .yml/.yaml file, load it as a user theme.
 	templateName := cfg.TemplateName
@@ -133,24 +135,32 @@ func New(cfg Config) (*Server, error) {
 		cfg.TemplateName = templateName
 	}
 
-	// Also load user themes from themes/ dir next to dashboards.
-	themesDir := filepath.Join(cfg.DashboardDir, "themes")
-	if err := themes.LoadUserThemes(themesDir); err != nil {
-		log.Printf("Warning: could not load user themes: %v", err)
+	if paths.ThemesDir != "" {
+		if err := themes.LoadUserThemes(paths.ThemesDir); err != nil {
+			log.Printf("Warning: could not load user themes: %v", err)
+		}
 	}
 
 	s := &Server{
 		config:      cfg,
+		paths:       paths,
 		backend:     cachedBackend,
 		themes:      themes,
-		loader:      &dashboardLoader{dir: cfg.DashboardDir, backend: cachedBackend},
-		codex:       codex.New(filepath.Join(cfg.DashboardDir, ".sessions")),
+		loader:      &dashboardLoader{dir: paths.RootDir, backend: cachedBackend},
+		codex:       codex.New(filepath.Join(paths.DashboardDir, ".sessions")),
 		mux:         http.NewServeMux(),
 		sessionDash: make(map[string]string),
 		drafts:      make(map[string]*DraftInfo),
 	}
 
 	s.setupRoutes()
+	dashboards, err := s.loader.LoadMeta()
+	if err != nil {
+		return nil, err
+	}
+	if err := dashboard.ValidateAll(dashboards); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -225,7 +235,7 @@ func spaHandler(fsys fs.FS) http.Handler {
 // It tries the configured port first, then increments until it finds an available one.
 func (s *Server) Start() error {
 	// Start file watcher.
-	watcher, err := NewWatcher(s.config.DashboardDir)
+	watcher, err := NewWatcher(s.paths.DashboardDir, s.paths.SemanticDir, s.paths.ThemesDir)
 	if err != nil {
 		log.Printf("Warning: file watcher disabled: %v", err)
 	} else {

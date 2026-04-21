@@ -69,3 +69,14 @@ func loadDashboards(dir string) ([]*dashboard.Dashboard, error) {
 	}
 	return dashboards, nil
 }
+
+func loadValidatedDashboards(dir string) ([]*dashboard.Dashboard, error) {
+	dashboards, err := loadDashboards(dir)
+	if err != nil || dashboards == nil {
+		return dashboards, err
+	}
+	if err := dashboard.ValidateAll(dashboards); err != nil {
+		return nil, err
+	}
+	return dashboards, nil
+}
