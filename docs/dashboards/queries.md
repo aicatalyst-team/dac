@@ -1,0 +1,183 @@
+# Queries & Templating
+
+DAC supports both SQL queries and semantic queries. Widgets can reference named queries or define their query shape inline.
+
+## Named SQL Queries
+
+```yaml
+queries:
+  total_revenue:
+    sql: |
+      SELECT SUM(amount) AS value FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at <= '{{ filters.date_range.end }}'
+
+  revenue_by_month:
+    file: queries/revenue_by_month.sql
+
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        query: total_revenue
+        column: value
+```
+
+## Named Semantic Queries
+
+```yaml
+model: sales
+
+queries:
+  online_by_region:
+    dimensions:
+      - name: region
+    metrics: [revenue]
+    segments: [online]
+    sort:
+      - name: revenue
+        direction: desc
+    limit: 8
+
+rows:
+  - widgets:
+      - name: Online Revenue by Region
+        type: chart
+        chart: bar
+        query: online_by_region
+```
+
+## Named Query Fields
+
+### SQL Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sql` | string | Inline SQL |
+| `file` | string | Path to a `.sql` file, relative to the dashboard |
+| `connection` | string | Connection override |
+
+### Semantic Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `model` | string | Semantic model name. Falls back to dashboard `model` when omitted |
+| `dimensions` | array | Dimensions to group by |
+| `metrics` | string[] | Metrics to select |
+| `filters` | array | Structured semantic filters |
+| `segments` | string[] | Segment names to apply |
+| `sort` | array | Sort instructions |
+| `limit` | integer | Row limit |
+| `connection` | string | Optional connection override |
+
+## Widget Query Sources
+
+Every data widget needs a query. You can provide one in five ways:
+
+1. `query`: reference a named query
+2. `sql`: inline SQL
+3. `file`: external `.sql` file
+4. `metric`: semantic metric reference with a model context
+5. semantic widget fields such as `dimension`, `dimensions`, `metrics`, `filters`, `segments`, `sort`, and `limit`
+
+Examples:
+
+```yaml
+# Named query
+- name: Revenue
+  type: metric
+  query: total_revenue
+  column: value
+
+# Inline SQL
+- name: Revenue
+  type: metric
+  sql: SELECT SUM(amount) AS value FROM sales
+  column: value
+
+# External file
+- name: Revenue
+  type: metric
+  file: queries/revenue.sql
+  column: value
+
+# Semantic metric widget
+- name: Revenue
+  type: metric
+  model: sales
+  metric: revenue
+
+# Direct semantic chart
+- name: Revenue by Month
+  type: chart
+  chart: area
+  model: sales
+  dimension: created_at
+  granularity: month
+  metrics: [revenue]
+```
+
+## Jinja Templating
+
+SQL queries are processed through Jinja before execution. Semantic filter values are also templated before the backend compiles them to SQL.
+
+### Variable Interpolation
+
+```sql
+SELECT * FROM orders
+WHERE region = '{{ filters.region }}'
+```
+
+### Conditionals
+
+```sql
+SELECT * FROM orders
+WHERE created_at >= '{{ filters.date_range.start }}'
+  AND created_at <= '{{ filters.date_range.end }}'
+{% if filters.region != 'All' %}
+  AND region = '{{ filters.region }}'
+{% endif %}
+```
+
+### Date Range Filters
+
+Date range filters expose `start` and `end` as `YYYY-MM-DD` strings:
+
+```sql
+WHERE created_at >= '{{ filters.date_range.start }}'
+  AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+```
+
+The same pattern works in semantic filters:
+
+```yaml
+filters:
+  - dimension: created_at
+    operator: between
+    value:
+      start: "{{ filters.date_range.start }}"
+      end: "{{ filters.date_range.end }}"
+```
+
+### Available Variables
+
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `filters.<name>` | Filter controls | Current filter value |
+| `filters.<date_range>.start` | Date range filter | Start date |
+| `filters.<date_range>.end` | Date range filter | End date |
+
+## Connection Override
+
+Any widget or named query can override the dashboard-level connection:
+
+```yaml
+connection: primary_db
+
+rows:
+  - widgets:
+      - name: Analytics Events
+        type: table
+        sql: SELECT * FROM events
+        connection: analytics_db
+```
