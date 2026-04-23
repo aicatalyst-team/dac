@@ -4,14 +4,14 @@ layout: home
 hero:
   name: DAC
   text: Dashboard-as-Code
-  tagline: Define, validate, and serve dashboards from YAML and TSX. One binary. No dependencies.
+  tagline: Define, validate, and serve dashboards from YAML and TSX. Embedded frontend, Bruin-powered query execution.
   actions:
     - theme: brand
       text: Get Started
       link: /getting-started/installation
     - theme: alt
       text: View on GitHub
-      link: https://github.com/bruin-data/bruin
+      link: https://github.com/bruin-data/dac
 
 features:
   - title: YAML & TSX
@@ -25,7 +25,7 @@ features:
   - title: Live Reload
     details: Edit your YAML or TSX, save, and see changes instantly in the browser. No restart needed.
   - title: Single Binary
-    details: Go backend with embedded React frontend. One binary, zero runtime dependencies. Works with any SQL database Bruin supports.
+    details: Go backend with embedded React frontend. DAC ships as one binary, while query execution uses the Bruin connections you already manage.
   - title: Static Export
     details: Build self-contained HTML dashboards with baked-in query results. Deploy anywhere — no server required.
   - title: Google Slides Export

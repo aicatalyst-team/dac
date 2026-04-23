@@ -1,28 +1,42 @@
 # Installation
 
-DAC is distributed as part of the [Bruin CLI](https://github.com/bruin-data/bruin). Install Bruin to get access to `dac`.
+DAC is released as standalone binaries through GitHub Releases.
 
-## Install Bruin
+## Install Script
 
-::: code-group
-
-```shell [macOS (Homebrew)]
-brew install bruin-data/tap/bruin
+```shell
+curl -fsSL https://raw.githubusercontent.com/bruin-data/dac/main/install.sh | bash
 ```
 
-```shell [Go]
-go install github.com/bruin-data/bruin@latest
+The installer downloads the latest GitHub release for your platform and installs `dac` into `~/.local/bin` by default.
+
+DAC uses `.bruin.yml` connections and currently shells out to `bruin query` to execute dashboard SQL. Install the Bruin CLI too if you plan to run live queries locally.
+
+To install the latest edge build from `main`:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/bruin-data/dac/main/install.sh | bash -s -- --channel edge
 ```
 
-:::
+To install into a different directory:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/bruin-data/dac/main/install.sh | bash -s -- -b /usr/local/bin
+```
+
+To install a specific version:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/bruin-data/dac/main/install.sh | bash -s -- v0.1.0
+```
 
 ## Build from Source
 
-If you're working on DAC itself:
+If you are developing DAC itself:
 
 ```shell
-git clone https://github.com/bruin-data/bruin.git
-cd bruin/internal/dac
+git clone https://github.com/bruin-data/dac.git
+cd dac
 make deps
 make build
 ```
@@ -32,32 +46,11 @@ The binary is output to `bin/dac`.
 ## Verify Installation
 
 ```shell
-dac --help
+dac version
 ```
 
-You should see:
+If you will run dashboards locally, also verify that the Bruin CLI is on your `PATH`:
 
-```
-NAME:
-   dac - Dashboard-as-Code: define, validate, and serve dashboards from YAML
-
-USAGE:
-   dac [global options] command [command options]
-
-COMMANDS:
-   serve        Start development server with live reload
-   build        Build static dashboard with baked-in query results
-   validate     Validate dashboard YAML definitions
-   check        Validate dashboards and execute all queries
-   query        Run a SQL query against a connection
-   ls           List discovered dashboards
-   connections  Test database connections
-   export       Export dashboards to external formats
-   help, h      Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --config value, -c value       Path to .bruin.yml config file
-   --environment value, -e value  Target environment name
-   --debug                        Enable debug logging
-   --help, -h                     show help
+```shell
+bruin --version
 ```

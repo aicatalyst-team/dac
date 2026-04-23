@@ -2,6 +2,25 @@
 
 Build your first dashboard in under 5 minutes.
 
+DAC uses Bruin connections for query execution, so make sure `bruin` is installed and available on your `PATH` before starting.
+
+## 0. Try a Bundled Example
+
+If you cloned the repository, you can run one of the example projects immediately:
+
+```shell
+make deps
+make build
+./bin/dac serve --dir examples/basic-yaml
+```
+
+The curated examples live under `examples/`:
+
+- `examples/basic-yaml`
+- `examples/basic-tsx`
+- `examples/semantic-yaml`
+- `examples/semantic-tsx`
+
 ## 1. Create a Project
 
 Create a DAC project with a `dashboards/` directory:
@@ -110,3 +129,4 @@ dac check --dir .
 - Use [TSX](/dashboards/tsx) for programmatic dashboards
 - Add [filters](/dashboards/filters) for interactivity
 - Add a `semantic/` directory and define a [semantic layer](/dashboards/semantic-layer)
+- Explore the runnable projects in [`examples/`](https://github.com/bruin-data/dac/tree/main/examples)

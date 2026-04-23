@@ -61,7 +61,7 @@ export default defineConfig({
       },
     ],
     socialLinks: [
-      { icon: "github", link: "https://github.com/bruin-data/bruin" },
+      { icon: "github", link: "https://github.com/bruin-data/dac" },
     ],
   },
   markdown: {

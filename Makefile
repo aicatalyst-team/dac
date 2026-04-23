@@ -1,6 +1,9 @@
 NAME=dac$(shell if [ "$(shell go env GOOS)" = "windows" ]; then echo .exe; fi)
 BUILD_DIR ?= bin
 BUILD_SRC=.
+VERSION ?= dev
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "")
+GO_LDFLAGS=-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
 NO_COLOR=\033[0m
 OK_COLOR=\033[32;01m
@@ -20,22 +23,20 @@ all: clean deps test build
 deps:
 	@printf "$(OK_COLOR)==> Installing dependencies$(NO_COLOR)\n"
 	@go mod tidy
-	@cd frontend && npm install
+	@cd frontend && npm ci --legacy-peer-deps
 
-# Build the frontend and copy to web/ for Go embedding
+# Build the frontend assets used for Go embedding
 frontend:
 	@echo "$(OK_COLOR)==> Building the frontend...$(NO_COLOR)"
 	@cd frontend && npm run build
-	@rm -rf web
-	@cp -r frontend/dist web
 
-# Build the Go binary (requires frontend to be built first)
+# Build the Go binary (requires frontend assets to be built first)
 build: frontend
 	@echo "$(OK_COLOR)==> Building the application...$(NO_COLOR)"
-	@go build -v -ldflags="-s -w" -o "$(BUILD_DIR)/$(NAME)" "$(BUILD_SRC)"
+	@go build -v -ldflags="$(GO_LDFLAGS)" -o "$(BUILD_DIR)/$(NAME)" "$(BUILD_SRC)"
 
 clean:
-	@rm -rf ./bin ./web ./frontend/dist
+	@rm -rf ./bin ./frontend/dist
 
 test: test-unit
 

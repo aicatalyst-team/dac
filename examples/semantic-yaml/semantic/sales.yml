@@ -1,0 +1,33 @@
+name: sales
+label: Sales
+description: Semantic model over the sample sales table
+source:
+  table: sales
+
+dimensions:
+  - name: created_at
+    type: time
+    granularities:
+      day: date_trunc('day', created_at)
+      month: date_trunc('month', created_at)
+  - name: region
+    type: string
+  - name: channel
+    type: string
+
+metrics:
+  - name: revenue
+    expression: sum(amount)
+  - name: sales_count
+    expression: count(*)
+  - name: unique_customers
+    expression: count(distinct customer_id)
+  - name: avg_sale_value
+    expression: "{revenue} / {sales_count}"
+  - name: online_revenue
+    expression: sum(amount)
+    filter: "channel = 'online'"
+
+segments:
+  - name: online
+    filter: "channel = 'online'"

@@ -50,7 +50,7 @@ Bruin is an engineering-grade data tool that presents information with authority
 | `make dev-frontend` | Frontend dev server only (Vite, proxies API to :8321) |
 | `make dev-backend` | Backend only with live reload (via `air`) |
 | `make build` | Production build: frontend → embed → Go binary |
-| `make frontend` | Build frontend and copy to `web/` for Go embedding |
+| `make frontend` | Build frontend assets for Go embedding |
 | `make test` | Run all tests |
 | `make deps` | Install Go + npm dependencies |
 | `make format` | Run `go vet` |

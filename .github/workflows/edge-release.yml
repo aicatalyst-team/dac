@@ -1,0 +1,66 @@
+name: Edge Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: edge-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Compute edge tag
+        id: edge
+        shell: bash
+        run: |
+          short_sha="$(printf '%.7s' "$GITHUB_SHA")"
+          edge_tag="v0.0.0-edge.${GITHUB_RUN_NUMBER}.${short_sha}"
+          echo "tag=${edge_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > /tmp/edge-release-notes.md <<EOF
+          ## Edge build
+
+          Commit: \`${GITHUB_SHA}\`
+
+          Install with:
+
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/bruin-data/dac/main/install.sh | bash -s -- --channel edge
+          \`\`\`
+          EOF
+
+      - name: Release edge build
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean --release-notes /tmp/edge-release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.edge.outputs.tag }}

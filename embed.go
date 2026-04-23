@@ -5,10 +5,10 @@ import (
 	"io/fs"
 )
 
-//go:embed web
+//go:embed frontend/dist
 var frontendFS embed.FS
 
 func frontendDistFS() fs.FS {
-	sub, _ := fs.Sub(frontendFS, "web")
+	sub, _ := fs.Sub(frontendFS, "frontend/dist")
 	return sub
 }

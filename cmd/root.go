@@ -10,10 +10,16 @@ import (
 // frontendFS is set by Run to pass the embedded frontend to the serve command.
 var frontendFS fs.FS
 
-func NewApp() *cli.Command {
+type BuildInfo struct {
+	Version string
+	Commit  string
+}
+
+func NewApp(build BuildInfo) *cli.Command {
 	return &cli.Command{
-		Name:  "dac",
-		Usage: "Dashboard-as-Code: define, validate, and serve dashboards from YAML",
+		Name:    "dac",
+		Usage:   "Dashboard-as-Code: define, validate, and serve dashboards from YAML",
+		Version: build.Version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "config",
@@ -39,11 +45,12 @@ func NewApp() *cli.Command {
 			lsCmd(),
 			connectionsCmd(),
 			exportCmd(),
+			versionCmd(build),
 		},
 	}
 }
 
-func Run(ctx context.Context, args []string, frontend fs.FS) error {
+func Run(ctx context.Context, args []string, frontend fs.FS, build BuildInfo) error {
 	frontendFS = frontend
-	return NewApp().Run(ctx, args)
+	return NewApp(build).Run(ctx, args)
 }
