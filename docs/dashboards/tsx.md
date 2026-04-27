@@ -177,6 +177,8 @@ export default (
 
 The backend compiles semantic widgets and semantic named queries to SQL at request time.
 
+For a complete runnable project, see `examples/semantic-tsx`.
+
 ## Widget Components
 
 All widget components accept the same props as their YAML equivalents.

@@ -1,6 +1,15 @@
 # Semantic Layer
 
-DAC loads semantic models from the project `semantic/` directory and compiles semantic widgets and named queries to SQL in the backend.
+DAC loads semantic models from a project-level `semantic/` directory. Dashboard files reference those models by name, and the backend compiles semantic widget definitions into SQL at request time.
+
+This keeps dashboard files focused on business intent:
+
+- which dimensions to group by
+- which metrics to show
+- which segments and filters to apply
+- how the result should be rendered
+
+The dashboard author does not need to hand-write the generated SQL.
 
 ## Project Layout
 
@@ -8,16 +17,24 @@ DAC loads semantic models from the project `semantic/` directory and compiles se
 my-project/
 ├── .bruin.yml
 ├── dashboards/
-│   └── sales.yml
+│   ├── sales.yml
+│   └── sales.dashboard.tsx
 └── semantic/
     └── sales.yml
 ```
 
-Dashboard files reference semantic models by name. They do not generate SQL themselves.
+Each semantic model is a separate `.yml` file under `semantic/`. Dashboard files still live under `dashboards/`.
+
+Run the bundled examples from the repository root:
+
+```shell
+./bin/dac serve --dir examples/semantic-yaml
+./bin/dac serve --dir examples/semantic-tsx
+```
 
 ## Model Files
 
-Each semantic model is a separate `.yml` file in `semantic/`:
+Example `semantic/sales.yml`:
 
 ```yaml
 name: sales
@@ -41,37 +58,47 @@ dimensions:
 metrics:
   - name: revenue
     expression: sum(amount)
+    format:
+      type: currency
+      currency: USD
+      decimals: 0
   - name: sales_count
     expression: count(*)
   - name: avg_sale_value
     expression: "{revenue} / {sales_count}"
+  - name: online_revenue
+    expression: sum(amount)
+    filter: "channel = 'online'"
 
 segments:
   - name: online
     filter: "channel = 'online'"
 ```
 
-## Model Fields
+## Model Reference
 
 ### Top Level
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Model name used by dashboards |
-| `label` | string | Optional display label |
-| `description` | string | Optional description |
-| `source.table` | string | Base table for the model |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Model name used by dashboards |
+| `label` | string | No | Display label |
+| `description` | string | No | Model description |
+| `source.table` | string | Yes | Base SQL table or relation |
+| `dimensions` | array | No | Fields available for grouping and filtering |
+| `metrics` | array | No | Aggregated or derived values |
+| `segments` | array | No | Reusable SQL predicates |
 
 ### Dimensions
 
-Dimensions are fields you group and filter by.
+Dimensions are fields that dashboards can group by, filter by, or sort by.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | Dimension name |
 | `type` | string | `string`, `number`, `boolean`, or `time` |
 | `expression` | string | SQL expression. Defaults to the dimension name when omitted |
-| `granularities` | map | Optional time bucket expressions such as `day`, `month`, or `year` |
+| `granularities` | map | Time bucket expressions such as `day`, `month`, or `year` |
 | `label` | string | Optional display label |
 | `description` | string | Optional description |
 | `hidden` | bool | Hide from UI consumers |
@@ -79,21 +106,28 @@ Dimensions are fields you group and filter by.
 
 ### Metrics
 
-Metrics are aggregated or derived values.
+Metrics are aggregate expressions. They can reference other metrics with `{metric_name}`.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | Metric name |
-| `expression` | string | SQL expression. Metric references use `{metric_name}` |
-| `filter` | string | Optional SQL predicate applied to the metric |
-| `format` | object | Optional formatting metadata |
-| `window` | object | Optional window function metadata |
+| `expression` | string | SQL aggregate or derived expression |
+| `filter` | string | Optional SQL predicate applied to only this metric |
+| `format.type` | string | `number`, `currency`, `percentage`, or `decimal` |
+| `format.currency` | string | Currency code for currency values |
+| `format.decimals` | integer | Decimal precision |
+| `window.type` | string | `running_total`, `lag`, `lead`, `rank`, or `percent_of_total` |
+| `window.order_by` | string | Window ordering expression |
+| `window.partition_by` | string[] | Window partitions |
+| `window.offset` | integer | Offset for `lag` or `lead` |
 | `label` | string | Optional display label |
 | `description` | string | Optional description |
+| `hidden` | bool | Hide from UI consumers |
+| `group` | string | Optional grouping label |
 
 ### Segments
 
-Segments are reusable filter predicates.
+Segments are named SQL predicates reused by dashboards.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -102,9 +136,9 @@ Segments are reusable filter predicates.
 | `label` | string | Optional display label |
 | `description` | string | Optional description |
 
-## Using Semantic Models in Dashboards
+## Referencing Models
 
-Set a default semantic model on the dashboard:
+Set a default model for the whole dashboard:
 
 ```yaml
 name: Semantic Sales Example
@@ -112,7 +146,25 @@ connection: local_duckdb
 model: sales
 ```
 
-### Metric Widgets
+Widgets and named queries then inherit `sales` unless they set their own `model`.
+
+You can also define aliases with `models`. This is useful when a dashboard references multiple models or when you want stable dashboard-facing names:
+
+```yaml
+name: Executive Sales
+connection: warehouse
+model: sales_model
+
+models:
+  sales_model: sales
+  support_model: support_tickets
+```
+
+In this example, dashboard widgets can use `model: sales_model`, and DAC resolves it to the `sales` semantic model.
+
+## Semantic Widgets
+
+### Metric
 
 ```yaml
 - name: Revenue
@@ -122,9 +174,12 @@ model: sales
     - dimension: region
       operator: equals
       value: "{{ filters.region }}"
+  prefix: "$"
+  format: number
+  col: 3
 ```
 
-### Chart Widgets
+### Chart
 
 ```yaml
 - name: Revenue Trend
@@ -136,9 +191,10 @@ model: sales
   sort:
     - name: created_at
       direction: asc
+  col: 8
 ```
 
-### Table Widgets
+### Table
 
 ```yaml
 - name: Sales Breakdown
@@ -147,14 +203,21 @@ model: sales
     - name: region
     - name: channel
   metrics: [revenue, sales_count]
+  sort:
+    - name: revenue
+      direction: desc
   limit: 20
+  col: 12
 ```
 
-### Named Semantic Queries
+## Named Semantic Queries
+
+Named semantic queries live in the dashboard `queries` map and can be reused by widgets:
 
 ```yaml
 queries:
   online_by_region:
+    model: sales
     dimensions:
       - name: region
     metrics: [revenue]
@@ -162,53 +225,113 @@ queries:
     sort:
       - name: revenue
         direction: desc
+    limit: 8
+
+rows:
+  - widgets:
+      - name: Online Revenue by Region
+        type: chart
+        chart: bar
+        query: online_by_region
+        col: 4
 ```
 
-Widgets can then reference that query with `query: online_by_region`.
+## Filters
 
-## Semantic Filters
+DAC has two related filter concepts:
 
-Structured filters target semantic dimensions:
+- Dashboard filters define UI controls, such as `select`, `date-range`, and `text`.
+- Semantic query filters define predicates applied to semantic dimensions before SQL execution.
+
+Dashboard filter values can be referenced in semantic filters with the same Jinja-style syntax used by SQL queries:
 
 ```yaml
 filters:
-  - dimension: created_at
-    operator: between
-    value:
-      start: "{{ filters.date_range.start }}"
-      end: "{{ filters.date_range.end }}"
+  - name: date_range
+    type: date-range
+    default: all_time
+
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        metric: revenue
+        filters:
+          - dimension: created_at
+            operator: between
+            value:
+              start: "{{ filters.date_range.start }}"
+              end: "{{ filters.date_range.end }}"
 ```
 
-Supported operators include:
-- `equals`
-- `not_equals`
-- `gt`
-- `gte`
-- `lt`
-- `lte`
-- `in`
-- `not_in`
-- `between`
-- `is_null`
-- `is_not_null`
+Structured semantic filters target dimensions. Metric-level conditions should usually be modeled as metric `filter` predicates or reusable `segments`.
 
-For advanced cases, filters can use `expression` instead of `dimension` plus `operator`.
+Supported operators:
 
-## TSX Example
+| Operator | Value shape |
+|----------|-------------|
+| `equals` | scalar |
+| `not_equals` | scalar |
+| `gt` | scalar |
+| `gte` | scalar |
+| `lt` | scalar |
+| `lte` | scalar |
+| `in` | array |
+| `not_in` | array |
+| `between` | `{start, end}` |
+| `is_null` | no value |
+| `is_not_null` | no value |
+
+Filter values can be strings, numbers, booleans, arrays, or objects. YAML numeric literals remain numeric when they are not wrapped in quotes.
+
+For advanced cases, use an expression filter:
+
+```yaml
+filters:
+  - expression: "{revenue} > 100000"
+```
+
+Expression filters can reference metrics with `{metric_name}` and are compiled into the appropriate SQL predicate.
+
+## TSX Dashboards
+
+TSX dashboards use the same semantic fields as YAML dashboards:
 
 ```tsx
 export default (
   <Dashboard name="Semantic Sales" connection="local_duckdb" model="sales">
+    <Filter
+      name="region"
+      type="select"
+      default="North America"
+      options={{ values: ["North America", "Europe", "APAC"] }}
+    />
+
     <Query
       name="onlineByRegion"
+      model="sales"
       dimensions={[{ name: "region" }]}
       metrics={["revenue"]}
       segments={["online"]}
+      sort={[{ name: "revenue", direction: "desc" }]}
+      limit={8}
     />
 
     <Row>
-      <Chart name="Online Revenue by Region" chart="bar" query="onlineByRegion" col={6} />
-      <Metric name="Revenue" metric="revenue" col={6} />
+      <Metric
+        name="Revenue"
+        metric="revenue"
+        filters={[
+          { dimension: "region", operator: "equals", value: "{{ filters.region }}" },
+        ]}
+        col={4}
+      />
+      <Chart
+        name="Online Revenue by Region"
+        chart="bar"
+        query="onlineByRegion"
+        col={8}
+      />
     </Row>
   </Dashboard>
 )
@@ -220,9 +343,26 @@ export default (
 
 Semantic widgets and named semantic queries go through the backend REST API. The backend:
 
-1. renders templated filter values
-2. validates models, dimensions, metrics, segments, and filters
-3. compiles the semantic query to SQL
-4. executes the generated SQL against the selected connection
+1. resolves the dashboard model or model alias
+2. renders templated filter values
+3. validates referenced dimensions, metrics, segments, filters, and sort fields
+4. compiles the semantic query to SQL
+5. executes the generated SQL against the selected connection
 
-This keeps SQL generation in the application backend rather than in dashboard files.
+SQL generation happens in the application backend, not in YAML or TSX dashboard files.
+
+## Validation
+
+`dac validate` checks semantic model structure and semantic references:
+
+```shell
+dac validate --dir examples/semantic-yaml
+```
+
+It fails dashboards that reference invalid semantic models, missing metrics, missing dimensions, unknown segments, or malformed filters. Regular SQL dashboards are still valid when they do not reference the broken semantic model.
+
+To inspect a compiled semantic widget by executing it:
+
+```shell
+./bin/dac query --dir examples/semantic-yaml --dashboard "Semantic Sales Example" --widget "Revenue"
+```

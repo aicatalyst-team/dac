@@ -122,6 +122,8 @@ rows:
 
 The backend REST API renders semantic filter templates and compiles the semantic query to SQL at request time.
 
+For a complete runnable project, see `examples/semantic-yaml`.
+
 ## Top-Level Fields
 
 | Field | Type | Required | Description |
@@ -193,6 +195,15 @@ rows:
 ```
 
 If the dashboard sets a top-level `model`, widgets can omit `model`.
+
+Use `models` when a dashboard needs stable aliases:
+
+```yaml
+model: sales_model
+
+models:
+  sales_model: sales
+```
 
 ## Connection Override
 

@@ -47,6 +47,8 @@ rows:
         query: online_by_region
 ```
 
+Named semantic queries use the same model resolution rules as widgets. If `model` is omitted, DAC uses the dashboard-level `model`. If `models` aliases are defined, the query can use either a model name or an alias.
+
 ## Named Query Fields
 
 ### SQL Fields
@@ -69,6 +71,8 @@ rows:
 | `sort` | array | Sort instructions |
 | `limit` | integer | Row limit |
 | `connection` | string | Optional connection override |
+
+Semantic query fields are compiled to SQL by the backend REST API when the widget is requested.
 
 ## Widget Query Sources
 
@@ -158,6 +162,8 @@ filters:
       start: "{{ filters.date_range.start }}"
       end: "{{ filters.date_range.end }}"
 ```
+
+Structured semantic filters target dimensions. Metric-specific predicates usually belong in the semantic model as a metric `filter` or as a reusable `segment`.
 
 ### Available Variables
 

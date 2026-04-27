@@ -87,6 +87,8 @@ When `--dir` points at a project root, DAC:
 - loads semantic models from `semantic/`
 - loads themes from `themes/` when present
 
+Semantic models are optional. Regular SQL dashboards do not need a `semantic/` directory and continue to validate independently of semantic dashboards.
+
 Dashboard discovery rules:
 - `*.yml` and `*.yaml` are parsed as YAML dashboards
 - `*.dashboard.tsx` files are parsed as TSX dashboards

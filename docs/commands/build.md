@@ -47,6 +47,8 @@ The HTML file includes a `window.__DAC_STATIC__` payload containing:
 - Theme tokens
 - Filter defaults
 
+Semantic widgets are compiled to SQL during the build, then the generated SQL results are baked into the static payload.
+
 Open `index.html` in a browser — no server needed. Deploy to any static hosting (S3, Netlify, GitHub Pages, etc.).
 
 ## Use Cases

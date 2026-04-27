@@ -32,10 +32,11 @@ dac validate --dir ./dashboards
 - **Filter types**: must be `select`, `date-range`, or `text`
 - **Chart types**: valid chart type names
 - **Semantic layer**:
-  - `source.table` is required when metrics/dimensions are defined
-  - Metrics need either `aggregate` or `expression`
-  - Expression metrics must reference valid metric names
-  - Dimensions need a `column`
+  - model files under `semantic/` have a `name` and `source.table`
+  - metric expressions are present and derived metric references exist
+  - referenced dashboard models or aliases exist
+  - semantic widgets reference valid metrics, dimensions, segments, filters, and sort fields
+  - invalid semantic models only fail dashboards that reference them
 
 ## Exit Code
 

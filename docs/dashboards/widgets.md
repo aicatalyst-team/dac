@@ -43,6 +43,8 @@ Metric widgets can also use semantic models:
   col: 3
 ```
 
+Semantic metric widgets inherit the dashboard-level `model` when `model` is omitted. See [Semantic Layer](/dashboards/semantic-layer) for model files, filters, segments, and aliases.
+
 Metric-specific fields:
 
 | Field | Type | Description |
@@ -105,6 +107,8 @@ Common chart fields:
 | `sort` | array | Sort instructions |
 | `limit` | integer | Row limit |
 
+Charts using `dimension`, `metrics`, `segments`, or semantic `filters` are compiled through the backend semantic layer instead of requiring hand-written SQL.
+
 ## Table
 
 Tables display query results in a scrollable grid.
@@ -147,6 +151,8 @@ Semantic example:
       label: Revenue
       format: currency
 ```
+
+Tables can mix semantic dimensions and metrics with explicit `columns` metadata for display labels and formatting.
 
 ## Text
 

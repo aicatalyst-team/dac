@@ -1,6 +1,6 @@
 # dac query
 
-Run SQL queries against configured connections. Supports inline SQL, SQL files, and dashboard widget queries.
+Run SQL queries against configured connections. Supports inline SQL, SQL files, SQL-backed dashboard widgets, and semantic dashboard widgets.
 
 ```shell
 dac query [SQL] [flags]
@@ -33,7 +33,7 @@ dac query --file queries/report.sql --connection my_db
 
 ### 3. Dashboard Widget
 
-Execute a specific widget's query with its filter defaults:
+Execute a specific widget's query with its filter defaults. If the widget uses a semantic model, DAC resolves the model from `semantic/` and compiles the widget to SQL before execution:
 
 ```shell
 dac query --dashboard "Sales Analytics" --widget "Revenue Trend"

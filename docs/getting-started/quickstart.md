@@ -123,6 +123,26 @@ dac validate --dir .
 dac check --dir .
 ```
 
+## 6. Try Semantic Models
+
+Semantic models live in a sibling `semantic/` directory and are referenced from dashboard widgets by model name:
+
+```text
+my-dashboards/
+├── .bruin.yml
+├── dashboards/
+│   └── semantic-sales.yml
+└── semantic/
+    └── sales.yml
+```
+
+You can try the bundled semantic example:
+
+```shell
+./bin/dac validate --dir examples/semantic-yaml
+./bin/dac query --dir examples/semantic-yaml --dashboard "Semantic Sales Example" --widget "Revenue"
+```
+
 ## Next Steps
 
 - Learn the full [YAML format](/dashboards/yaml)

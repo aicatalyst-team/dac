@@ -1,5 +1,5 @@
 name: Semantic Sales Example
-description: Example dashboard using semantic models from testdata/semantic
+description: Example dashboard using semantic models from the project semantic directory
 connection: local_duckdb
 model: sales
 
