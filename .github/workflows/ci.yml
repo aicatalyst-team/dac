@@ -45,6 +45,17 @@ jobs:
       - name: Build DAC
         run: make build
 
+      - name: Run init smoke test
+        shell: bash
+        run: |
+          ./bin/dac init /tmp/dac-init-smoke
+          ./bin/dac validate --dir /tmp/dac-init-smoke
+          ./bin/dac query --dir /tmp/dac-init-smoke --dashboard "Semantic Sales" --widget "Revenue" --output json > /tmp/init-semantic.json
+          python3 -c 'import json; data=json.load(open("/tmp/init-semantic.json")); assert len(data["rows"]) > 0'
+
+          ./bin/dac init /tmp/dac-init-tsx --template tsx
+          ./bin/dac validate --dir /tmp/dac-init-tsx
+
       - name: Validate example projects
         shell: bash
         run: |

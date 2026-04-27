@@ -42,6 +42,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: "Overview", link: "/commands/overview" },
+          { text: "init", link: "/commands/init" },
           { text: "serve", link: "/commands/serve" },
           { text: "build", link: "/commands/build" },
           { text: "validate", link: "/commands/validate" },

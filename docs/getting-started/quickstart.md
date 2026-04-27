@@ -23,107 +23,46 @@ The curated examples live under `examples/`:
 
 ## 1. Create a Project
 
-Create a DAC project with a `dashboards/` directory:
+Use `dac init` to create a runnable starter project:
 
 ```shell
-mkdir -p my-dashboards/dashboards && cd my-dashboards
+dac init my-dashboards
+cd my-dashboards
 ```
 
-Create `.bruin.yml`:
+The starter includes a SQL-backed YAML dashboard, a semantic YAML dashboard, a `semantic/sales.yml` model, and a `.bruin.yml` DuckDB connection. The generated queries include inline sample data, so there is no separate seed step.
 
-```yaml
-default_environment: default
-
-environments:
-  default:
-    connections:
-      duckdb:
-        - name: my_db
-          path: data.duckdb
-```
-
-## 2. Create a Dashboard
-
-Create `dashboards/sales.yml`:
-
-```yaml
-name: Sales Overview
-description: A simple sales dashboard
-connection: my_db
-
-rows:
-  - widgets:
-      - name: Total Revenue
-        type: metric
-        col: 4
-        sql: SELECT SUM(amount) AS value FROM sales
-        column: value
-        prefix: "$"
-        format: number
-
-      - name: Order Count
-        type: metric
-        col: 4
-        sql: SELECT COUNT(*) AS value FROM orders
-        column: value
-        format: number
-
-      - name: Avg Order Value
-        type: metric
-        col: 4
-        sql: SELECT ROUND(AVG(amount), 2) AS value FROM orders
-        column: value
-        prefix: "$"
-        format: number
-
-  - widgets:
-      - name: Revenue Over Time
-        type: chart
-        chart: area
-        col: 8
-        sql: |
-          SELECT
-            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
-            SUM(amount) AS revenue
-          FROM sales
-          GROUP BY 1
-          ORDER BY 1
-        x: month
-        y: [revenue]
-
-      - name: Revenue by Region
-        type: chart
-        chart: pie
-        col: 4
-        sql: |
-          SELECT region, SUM(amount) AS total
-          FROM sales
-          GROUP BY 1
-        label: region
-        value: total
-```
-
-## 3. Start the Server
+## 2. Start the Server
 
 ```shell
 dac serve --dir . --open
 ```
 
-The dashboard will be available at `http://localhost:8321`.
+The dashboards will be available at `http://localhost:8321`.
 
-## 4. Validate the Project
+## 3. Validate the Project
 
 ```shell
 dac validate --dir .
 ```
 
-## 5. Check Queries
+## 4. Check Queries
 
 ```shell
 dac check --dir .
 ```
 
-## 6. Try Semantic Models
+## 5. Try Other Templates
+
+`dac init` can also generate smaller starter projects:
+
+```shell
+dac init sql-only --template sql
+dac init semantic-yaml --template semantic
+dac init semantic-tsx --template tsx
+```
+
+## 6. Semantic Model Layout
 
 Semantic models live in a sibling `semantic/` directory and are referenced from dashboard widgets by model name:
 

@@ -18,7 +18,7 @@ type BuildInfo struct {
 func NewApp(build BuildInfo) *cli.Command {
 	return &cli.Command{
 		Name:    "dac",
-		Usage:   "Dashboard-as-Code: define, validate, and serve dashboards from YAML",
+		Usage:   "Dashboard-as-Code: define, validate, and serve dashboards from YAML and TSX",
 		Version: build.Version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -37,6 +37,7 @@ func NewApp(build BuildInfo) *cli.Command {
 			},
 		},
 		Commands: []*cli.Command{
+			initCmd(),
 			serveCmd(),
 			buildCmd(),
 			validateCmd(),

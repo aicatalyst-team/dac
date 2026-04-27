@@ -30,21 +30,23 @@ DAC uses your existing Bruin connections and currently shells out to `bruin quer
 
 ## Quickstart
 
-Run one of the bundled example projects:
+Create a new starter project:
 
 ```bash
-git clone https://github.com/bruin-data/dac.git
-cd dac
+dac init my-dashboards
+cd my-dashboards
+dac validate --dir .
+dac serve --dir . --open
+```
+
+The starter includes a SQL-backed YAML dashboard, a semantic YAML dashboard, and a semantic model under `semantic/`.
+
+If you cloned the repository, you can also run one of the bundled example projects:
+
+```bash
 make deps
 make build
 ./bin/dac serve --dir examples/basic-yaml
-```
-
-Then validate a semantic example:
-
-```bash
-./bin/dac validate --dir examples/semantic-yaml
-./bin/dac query --dir examples/semantic-yaml --dashboard "Semantic Sales Example" --widget "Revenue"
 ```
 
 ## Examples

@@ -16,6 +16,7 @@ These flags apply to all commands:
 
 | Command | Description |
 |---------|-------------|
+| [`init`](/commands/init) | Create a new DAC project |
 | [`serve`](/commands/serve) | Start development server with live reload |
 | [`build`](/commands/build) | Build static dashboard with baked-in query results |
 | [`validate`](/commands/validate) | Validate dashboard definitions |
