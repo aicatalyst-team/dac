@@ -36,6 +36,15 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/bruin-data/bruin/main/install.sh | bash -s -- -b "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Warm Bruin query runtime
+        shell: bash
+        run: |
+          bruin query --output json --config-file examples/basic-yaml/.bruin.yml -c local_duckdb -q "SELECT 1 AS value" > /tmp/bruin-warmup.out
+          tail -n 1 /tmp/bruin-warmup.out | python3 -c 'import json, sys; data=json.load(sys.stdin); assert len(data["rows"]) > 0'
+          if [ -d "$HOME/.bruin" ]; then
+            echo "$HOME/.bruin" >> "$GITHUB_PATH"
+          fi
+
       - name: Install DAC dependencies
         run: make deps
 
