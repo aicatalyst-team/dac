@@ -41,6 +41,10 @@ jobs:
           edge_tag="v0.0.0-edge.${GITHUB_RUN_NUMBER}.${short_sha}"
           echo "tag=${edge_tag}" >> "$GITHUB_OUTPUT"
 
+      - name: Create local edge tag
+        shell: bash
+        run: git tag "${{ steps.edge.outputs.tag }}" "$GITHUB_SHA"
+
       - name: Write release notes
         shell: bash
         run: |
