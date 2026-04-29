@@ -1,0 +1,15 @@
+root = "."
+
+[build]
+  cmd = "go build -o bin/dac ."
+  bin = "bin/dac"
+  args_bin = ["serve", "--dir", "./testdata/dashboards", "--port", "8321"]
+  include_ext = ["go", "yml", "yaml"]
+  exclude_dir = ["bin", "web", "frontend", "testdata", ".sessions", ".claude"]
+  delay = 500
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true

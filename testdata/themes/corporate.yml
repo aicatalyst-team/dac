@@ -1,0 +1,9 @@
+schema: https://getbruin.com/schemas/dac/theme/v1
+name: corporate
+extends: bruin
+tokens:
+  background: "#FFFFFF"
+  surface: "#F8FAFC"
+  border: "#CBD5E1"
+  text-primary: "#0F172A"
+  accent: "#0F766E"

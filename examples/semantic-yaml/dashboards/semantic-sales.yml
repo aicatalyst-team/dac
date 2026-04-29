@@ -1,0 +1,149 @@
+schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Semantic Sales Example
+description: Example dashboard using semantic models from the project semantic directory
+connection: local_duckdb
+model: sales
+
+filters:
+  - name: region
+    type: select
+    default: North America
+    options:
+      values: [North America, Europe, APAC]
+  - name: date_range
+    type: date-range
+    default: all_time
+
+queries:
+  online_by_region:
+    model: sales
+    dimensions:
+      - name: region
+    metrics: [revenue]
+    segments: [online]
+    sort:
+      - name: revenue
+        direction: desc
+    limit: 8
+
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        metric: revenue
+        filters:
+          - dimension: region
+            operator: equals
+            value: "{{ filters.region }}"
+          - dimension: created_at
+            operator: between
+            value:
+              start: "{{ filters.date_range.start }}"
+              end: "{{ filters.date_range.end }}"
+        prefix: "$"
+        format: number
+        col: 3
+
+      - name: Sales Count
+        type: metric
+        metric: sales_count
+        filters:
+          - dimension: region
+            operator: equals
+            value: "{{ filters.region }}"
+          - dimension: created_at
+            operator: between
+            value:
+              start: "{{ filters.date_range.start }}"
+              end: "{{ filters.date_range.end }}"
+        format: number
+        col: 3
+
+      - name: Unique Customers
+        type: metric
+        metric: unique_customers
+        filters:
+          - dimension: region
+            operator: equals
+            value: "{{ filters.region }}"
+          - dimension: created_at
+            operator: between
+            value:
+              start: "{{ filters.date_range.start }}"
+              end: "{{ filters.date_range.end }}"
+        format: number
+        col: 3
+
+      - name: Average Sale Value
+        type: metric
+        metric: avg_sale_value
+        filters:
+          - dimension: region
+            operator: equals
+            value: "{{ filters.region }}"
+          - dimension: created_at
+            operator: between
+            value:
+              start: "{{ filters.date_range.start }}"
+              end: "{{ filters.date_range.end }}"
+        prefix: "$"
+        format: number
+        col: 3
+
+  - widgets:
+      - name: Revenue Trend
+        type: chart
+        chart: area
+        dimension: created_at
+        granularity: month
+        metrics: [revenue]
+        filters:
+          - dimension: region
+            operator: equals
+            value: "{{ filters.region }}"
+          - dimension: created_at
+            operator: between
+            value:
+              start: "{{ filters.date_range.start }}"
+              end: "{{ filters.date_range.end }}"
+        sort:
+          - name: created_at
+            direction: asc
+        col: 8
+
+      - name: Online Revenue by Region
+        type: chart
+        chart: bar
+        query: online_by_region
+        col: 4
+
+  - widgets:
+      - name: Sales Breakdown
+        type: table
+        model: sales
+        dimensions:
+          - name: region
+          - name: channel
+        metrics: [revenue, sales_count]
+        filters:
+          - dimension: created_at
+            operator: between
+            value:
+              start: "{{ filters.date_range.start }}"
+              end: "{{ filters.date_range.end }}"
+        sort:
+          - name: revenue
+            direction: desc
+        limit: 20
+        columns:
+          - name: region
+            label: Region
+          - name: channel
+            label: Channel
+          - name: revenue
+            label: Revenue
+            format: currency
+          - name: sales_count
+            label: Sales
+            format: number
+        col: 12

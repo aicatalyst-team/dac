@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getbruin.com/schemas/dac/theme/v1",
+  "title": "Bruin DAC Theme",
+  "type": "object",
+  "required": ["schema", "name", "tokens"],
+  "properties": {
+    "schema": {
+      "const": "https://getbruin.com/schemas/dac/theme/v1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extends": {
+      "type": "string"
+    },
+    "tokens": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "patternProperties": {
+    "^x-": true
+  },
+  "additionalProperties": false
+}

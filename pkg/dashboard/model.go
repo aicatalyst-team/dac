@@ -1,0 +1,435 @@
+package dashboard
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	sem "github.com/bruin-data/dac/pkg/semantic"
+)
+
+// Widget type constants.
+const (
+	WidgetTypeMetric  = "metric"
+	WidgetTypeChart   = "chart"
+	WidgetTypeTable   = "table"
+	WidgetTypeText    = "text"
+	WidgetTypeDivider = "divider"
+	WidgetTypeImage   = "image"
+)
+
+// Dashboard represents a complete dashboard definition loaded from YAML.
+type Dashboard struct {
+	Schema      string            `yaml:"schema,omitempty" json:"schema,omitempty"`
+	Name        string            `yaml:"name" json:"name"`
+	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
+	Connection  string            `yaml:"connection,omitempty" json:"connection,omitempty"`
+	Model       string            `yaml:"model,omitempty" json:"model,omitempty"`
+	Models      map[string]string `yaml:"models,omitempty" json:"models,omitempty"`
+	Theme       string            `yaml:"theme,omitempty" json:"theme,omitempty"`
+	Refresh     *RefreshConfig    `yaml:"refresh,omitempty" json:"refresh,omitempty"`
+	Filters     []Filter          `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Queries     map[string]Query  `yaml:"queries,omitempty" json:"queries,omitempty"`
+	Semantic    *SemanticLayer    `yaml:"semantic,omitempty" json:"semantic,omitempty"`
+	Rows        []Row             `yaml:"rows" json:"rows"`
+
+	// FilePath is the source file path, not serialized to JSON for API consumers.
+	FilePath string `yaml:"-" json:"-"`
+
+	// FileType indicates the source format: "yaml" or "tsx".
+	FileType string `yaml:"-" json:"file_type,omitempty"`
+
+	projectRoot     string                `yaml:"-" json:"-"`
+	semanticModels  map[string]*sem.Model `yaml:"-" json:"-"`
+	semanticInvalid map[string]error      `yaml:"-" json:"-"`
+}
+
+// SemanticLayer groups the declarative source, metrics, and dimensions.
+type SemanticLayer struct {
+	Source     *Source              `yaml:"source,omitempty" json:"source,omitempty"`
+	Metrics    map[string]Metric    `yaml:"metrics,omitempty" json:"metrics,omitempty"`
+	Dimensions map[string]Dimension `yaml:"dimensions,omitempty" json:"dimensions,omitempty"`
+}
+
+type RefreshConfig struct {
+	Interval string `yaml:"interval" json:"interval"`
+}
+
+type Filter struct {
+	Name     string         `yaml:"name" json:"name"`
+	Type     string         `yaml:"type" json:"type"`
+	Multiple bool           `yaml:"multiple,omitempty" json:"multiple,omitempty"`
+	Default  any            `yaml:"default,omitempty" json:"default,omitempty"`
+	Options  *FilterOptions `yaml:"options,omitempty" json:"options,omitempty"`
+}
+
+type FilterOptions struct {
+	Values     []string `yaml:"values,omitempty" json:"values,omitempty"`
+	Query      string   `yaml:"query,omitempty" json:"query,omitempty"`
+	Connection string   `yaml:"connection,omitempty" json:"connection,omitempty"`
+	Presets    []string `yaml:"presets,omitempty" json:"presets,omitempty"` // date-range: which presets to show
+}
+
+// Source defines the base table for declarative metrics.
+type Source struct {
+	Table      string `yaml:"table" json:"table"`
+	DateColumn string `yaml:"date_column,omitempty" json:"date_column,omitempty"`
+	DateFormat string `yaml:"date_format,omitempty" json:"date_format,omitempty"`
+	Connection string `yaml:"connection,omitempty" json:"connection,omitempty"`
+}
+
+// Metric defines a named scalar value computed from the source table.
+// Use Aggregate for database-computed metrics, or Expression for
+// client-side arithmetic over other metrics.
+type Metric struct {
+	Aggregate  string            `yaml:"aggregate,omitempty" json:"aggregate,omitempty"` // count, count_distinct, sum, avg, min, max
+	Column     string            `yaml:"column,omitempty" json:"column,omitempty"`
+	Filter     map[string]string `yaml:"filter,omitempty" json:"filter,omitempty"`
+	Expression string            `yaml:"expression,omitempty" json:"expression,omitempty"`
+}
+
+// IsExpression returns true if this metric is computed from other metrics.
+func (m *Metric) IsExpression() bool {
+	return m.Expression != ""
+}
+
+// Dimension defines a named grouping column for dimensional queries.
+type Dimension struct {
+	Column string `yaml:"column" json:"column"`                 // the SQL column expression (e.g. "geo.country")
+	Type   string `yaml:"type,omitempty" json:"type,omitempty"` // "date" for chronological ordering, empty for top-N
+}
+
+// IsDate returns true if this dimension represents a date/time column.
+func (dim *Dimension) IsDate() bool {
+	return dim.Type == "date"
+}
+
+// Query represents a named query definition.
+type Query struct {
+	SQL        string                 `yaml:"sql,omitempty" json:"sql,omitempty"`
+	File       string                 `yaml:"file,omitempty" json:"file,omitempty"`
+	Connection string                 `yaml:"connection,omitempty" json:"connection,omitempty"`
+	Model      string                 `yaml:"model,omitempty" json:"model,omitempty"`
+	Dimensions []SemanticDimensionRef `yaml:"dimensions,omitempty" json:"dimensions,omitempty"`
+	Metrics    []string               `yaml:"metrics,omitempty" json:"metrics,omitempty"`
+	Filters    []SemanticQueryFilter  `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Segments   []string               `yaml:"segments,omitempty" json:"segments,omitempty"`
+	Sort       []SemanticSort         `yaml:"sort,omitempty" json:"sort,omitempty"`
+	Limit      int                    `yaml:"limit,omitempty" json:"limit,omitempty"`
+}
+
+type Row struct {
+	Tab     string   `yaml:"tab,omitempty" json:"tab,omitempty"`
+	Height  any      `yaml:"height,omitempty" json:"height,omitempty"`
+	Widgets []Widget `yaml:"widgets" json:"widgets"`
+}
+
+// Widget represents a single dashboard widget.
+// Query resolution priority: query (named ref) > sql (inline) > file (external).
+type Widget struct {
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	Type        string `yaml:"type" json:"type"` // metric, chart, table, text
+	Col         int    `yaml:"col,omitempty" json:"col,omitempty"`
+
+	// Query source (pick one)
+	QueryRef  string `yaml:"query,omitempty" json:"query,omitempty"` // reference to queries map key
+	SQL       string `yaml:"sql,omitempty" json:"sql,omitempty"`
+	File      string `yaml:"file,omitempty" json:"file,omitempty"`
+	MetricRef string `yaml:"metric,omitempty" json:"metric,omitempty"` // reference to metrics map key
+	Model     string `yaml:"model,omitempty" json:"model,omitempty"`
+
+	// Connection override for inline queries
+	Connection string `yaml:"connection,omitempty" json:"connection,omitempty"`
+
+	// Metric fields
+	Column string `yaml:"column,omitempty" json:"column,omitempty"`
+	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+	Suffix string `yaml:"suffix,omitempty" json:"suffix,omitempty"`
+	Format string `yaml:"format,omitempty" json:"format,omitempty"`
+
+	// Declarative chart fields (use with source + metrics)
+	Dimension   string                 `yaml:"dimension,omitempty" json:"dimension,omitempty"` // GROUP BY column
+	Granularity string                 `yaml:"granularity,omitempty" json:"granularity,omitempty"`
+	Dimensions  []SemanticDimensionRef `yaml:"dimensions,omitempty" json:"dimensions,omitempty"`
+	MetricRefs  []string               `yaml:"metrics,omitempty" json:"metrics,omitempty"` // metric names to aggregate
+	Filters     []SemanticQueryFilter  `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Segments    []string               `yaml:"segments,omitempty" json:"segments,omitempty"`
+	Sort        []SemanticSort         `yaml:"sort,omitempty" json:"sort,omitempty"`
+	Limit       int                    `yaml:"limit,omitempty" json:"limit,omitempty"` // LIMIT for dimensional queries
+
+	// Chart fields
+	Chart   string   `yaml:"chart,omitempty" json:"chart,omitempty"` // line, bar, area, pie, scatter, bubble, combo, histogram, boxplot, funnel, sankey, heatmap, calendar, sparkline, waterfall, xmr, dumbbell
+	X       string   `yaml:"x,omitempty" json:"x,omitempty"`
+	Y       []string `yaml:"y,omitempty" json:"y,omitempty"`
+	Label   string   `yaml:"label,omitempty" json:"label,omitempty"`     // for pie/funnel
+	Value   string   `yaml:"value,omitempty" json:"value,omitempty"`     // for pie/funnel/heatmap/calendar
+	Stacked bool     `yaml:"stacked,omitempty" json:"stacked,omitempty"` // for bar/area charts
+	Size    string   `yaml:"size,omitempty" json:"size,omitempty"`       // bubble: size dimension column
+	Source  string   `yaml:"source,omitempty" json:"source,omitempty"`   // sankey: source column
+	Target  string   `yaml:"target,omitempty" json:"target,omitempty"`   // sankey: target column
+	Bins    int      `yaml:"bins,omitempty" json:"bins,omitempty"`       // histogram: number of bins
+	Lines   []string `yaml:"lines,omitempty" json:"lines,omitempty"`     // combo: which y series render as lines
+	YMin    string   `yaml:"yMin,omitempty" json:"yMin,omitempty"`       // xmr: min control limit column
+	YMax    string   `yaml:"yMax,omitempty" json:"yMax,omitempty"`       // xmr: max control limit column
+
+	// Table fields
+	Columns []TableColumn `yaml:"columns,omitempty" json:"columns,omitempty"`
+
+	// Text fields
+	Content string `yaml:"content,omitempty" json:"content,omitempty"`
+
+	// Image fields
+	Src string `yaml:"src,omitempty" json:"src,omitempty"`
+	Alt string `yaml:"alt,omitempty" json:"alt,omitempty"`
+}
+
+type TableColumn struct {
+	Name   string `yaml:"name" json:"name"`
+	Label  string `yaml:"label,omitempty" json:"label,omitempty"`
+	Format string `yaml:"format,omitempty" json:"format,omitempty"`
+}
+
+type SemanticDimensionRef struct {
+	Name        string `yaml:"name" json:"name"`
+	Granularity string `yaml:"granularity,omitempty" json:"granularity,omitempty"`
+}
+
+type SemanticQueryFilter struct {
+	Dimension  string `yaml:"dimension,omitempty" json:"dimension,omitempty"`
+	Operator   string `yaml:"operator,omitempty" json:"operator,omitempty"`
+	Value      any    `yaml:"value,omitempty" json:"value,omitempty"`
+	Expression string `yaml:"expression,omitempty" json:"expression,omitempty"`
+}
+
+type SemanticSort struct {
+	Name      string `yaml:"name" json:"name"`
+	Direction string `yaml:"direction,omitempty" json:"direction,omitempty"`
+}
+
+// DefaultFilters returns a map of filter names to their default values.
+// For date-range filters, string defaults like "last_30_days" are resolved
+// to {start, end} maps so that query templating works correctly.
+func (d *Dashboard) DefaultFilters() map[string]any {
+	defaults := make(map[string]any)
+	for _, f := range d.Filters {
+		if f.Default != nil {
+			val := f.Default
+			if f.Type == "date-range" {
+				if preset, ok := val.(string); ok {
+					if resolved := ResolveDatePreset(preset); resolved != nil {
+						val = resolved
+					}
+				}
+			}
+			defaults[f.Name] = val
+		}
+	}
+	return defaults
+}
+
+// ResolveDatePreset converts a preset key like "last_30_days" into a
+// map with "start" and "end" date strings. Returns nil if the key is unknown.
+func ResolveDatePreset(key string) map[string]any {
+	now := time.Now()
+	today := now.Format("2006-01-02")
+
+	switch key {
+	case "today":
+		return map[string]any{"start": today, "end": today}
+	case "yesterday":
+		d := now.AddDate(0, 0, -1).Format("2006-01-02")
+		return map[string]any{"start": d, "end": d}
+	case "last_7_days":
+		return map[string]any{"start": now.AddDate(0, 0, -6).Format("2006-01-02"), "end": today}
+	case "last_30_days":
+		return map[string]any{"start": now.AddDate(0, 0, -29).Format("2006-01-02"), "end": today}
+	case "last_90_days":
+		return map[string]any{"start": now.AddDate(0, 0, -89).Format("2006-01-02"), "end": today}
+	case "this_month":
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		end := start.AddDate(0, 1, -1)
+		return map[string]any{"start": start.Format("2006-01-02"), "end": end.Format("2006-01-02")}
+	case "last_month":
+		start := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, now.Location())
+		end := time.Date(now.Year(), now.Month(), 0, 0, 0, 0, 0, now.Location())
+		return map[string]any{"start": start.Format("2006-01-02"), "end": end.Format("2006-01-02")}
+	case "this_quarter":
+		q := (int(now.Month()) - 1) / 3
+		start := time.Date(now.Year(), time.Month(q*3+1), 1, 0, 0, 0, 0, now.Location())
+		end := start.AddDate(0, 3, -1)
+		return map[string]any{"start": start.Format("2006-01-02"), "end": end.Format("2006-01-02")}
+	case "this_year":
+		return map[string]any{"start": fmt.Sprintf("%d-01-01", now.Year()), "end": fmt.Sprintf("%d-12-31", now.Year())}
+	case "year_to_date":
+		return map[string]any{"start": fmt.Sprintf("%d-01-01", now.Year()), "end": today}
+	case "all_time":
+		return map[string]any{"start": "1970-01-01", "end": "2099-12-31"}
+	default:
+		return nil
+	}
+}
+
+// DateRangeFilterName returns the name of the first date-range filter, or "".
+func (d *Dashboard) DateRangeFilterName() string {
+	for _, f := range d.Filters {
+		if f.Type == "date-range" {
+			return f.Name
+		}
+	}
+	return ""
+}
+
+// SourceConnection returns the connection for the semantic source, falling
+// back to the dashboard default.
+func (d *Dashboard) SourceConnection() string {
+	if d.Semantic != nil && d.Semantic.Source != nil && d.Semantic.Source.Connection != "" {
+		return d.Semantic.Source.Connection
+	}
+	return d.Connection
+}
+
+// SemanticSource returns the semantic layer's source, or nil.
+func (d *Dashboard) SemanticSource() *Source {
+	if d.Semantic != nil {
+		return d.Semantic.Source
+	}
+	return nil
+}
+
+// SemanticMetrics returns the semantic layer's metrics, or nil.
+func (d *Dashboard) SemanticMetrics() map[string]Metric {
+	if d.Semantic != nil {
+		return d.Semantic.Metrics
+	}
+	return nil
+}
+
+// SemanticDimensions returns the semantic layer's dimensions, or nil.
+func (d *Dashboard) SemanticDimensions() map[string]Dimension {
+	if d.Semantic != nil {
+		return d.Semantic.Dimensions
+	}
+	return nil
+}
+
+func (d *Dashboard) SetProjectContext(projectRoot string, semanticModels map[string]*sem.Model, semanticInvalid map[string]error) {
+	d.projectRoot = projectRoot
+	d.semanticModels = semanticModels
+	d.semanticInvalid = semanticInvalid
+}
+
+func (d *Dashboard) ResolveSemanticModel(ref string) (*sem.Model, string, error) {
+	name := strings.TrimSpace(ref)
+	if name == "" {
+		name = strings.TrimSpace(d.Model)
+	}
+	if actual, ok := d.Models[name]; ok {
+		name = actual
+	}
+	if name == "" {
+		return nil, "", nil
+	}
+	model, ok := d.semanticModels[name]
+	if !ok {
+		if err, invalid := d.semanticInvalid[name]; invalid {
+			return nil, "", fmt.Errorf("semantic model %q is invalid: %w", name, err)
+		}
+		return nil, "", fmt.Errorf("semantic model %q not found", name)
+	}
+	return model, name, nil
+}
+
+func (q *Query) IsSemantic() bool {
+	return q.Model != "" ||
+		len(q.Dimensions) > 0 ||
+		len(q.Metrics) > 0 ||
+		len(q.Filters) > 0 ||
+		len(q.Segments) > 0 ||
+		len(q.Sort) > 0 ||
+		q.Limit > 0
+}
+
+func (w *Widget) IsSemantic() bool {
+	return w.Model != "" ||
+		len(w.Dimensions) > 0 ||
+		w.Dimension != "" ||
+		w.Granularity != "" ||
+		len(w.MetricRefs) > 0 ||
+		len(w.Filters) > 0 ||
+		len(w.Segments) > 0 ||
+		len(w.Sort) > 0
+}
+
+// FindByName returns the dashboard with the given name from a slice, or nil.
+func FindByName(dashboards []*Dashboard, name string) *Dashboard {
+	for _, d := range dashboards {
+		if d.Name == name {
+			return d
+		}
+	}
+	return nil
+}
+
+// ResolvedQuery returns the SQL and connection for this widget, resolving named query references.
+// Widgets with MetricRef are handled separately and should not call this method.
+func (w *Widget) ResolvedQuery(dashboard *Dashboard) (sql, connection string, err error) {
+	if w.MetricRef != "" || len(w.MetricRefs) > 0 {
+		return "", "", nil // metric-based widgets are resolved via the metrics system
+	}
+
+	switch {
+	case w.QueryRef != "":
+		q, ok := dashboard.Queries[w.QueryRef]
+		if !ok {
+			return "", "", &QueryNotFoundError{Name: w.QueryRef, Widget: w.Name}
+		}
+		conn := q.Connection
+		if conn == "" {
+			conn = dashboard.Connection
+		}
+		if q.SQL != "" {
+			return q.SQL, conn, nil
+		}
+		// File-based query — SQL should have been loaded by the loader.
+		return q.SQL, conn, nil
+
+	case w.SQL != "":
+		conn := w.Connection
+		if conn == "" {
+			conn = dashboard.Connection
+		}
+		return w.SQL, conn, nil
+
+	case w.File != "":
+		// File-based inline query — SQL should have been loaded by the loader.
+		conn := w.Connection
+		if conn == "" {
+			conn = dashboard.Connection
+		}
+		return w.SQL, conn, nil
+
+	default:
+		if w.Type == WidgetTypeText || w.Type == WidgetTypeDivider || w.Type == WidgetTypeImage {
+			return "", "", nil
+		}
+		return "", "", &NoQueryError{Widget: w.Name}
+	}
+}
+
+type QueryNotFoundError struct {
+	Name   string
+	Widget string
+}
+
+func (e *QueryNotFoundError) Error() string {
+	return "widget \"" + e.Widget + "\": query \"" + e.Name + "\" not found in queries map"
+}
+
+type NoQueryError struct {
+	Widget string
+}
+
+func (e *NoQueryError) Error() string {
+	return "widget \"" + e.Widget + "\": no query, sql, or file specified"
+}

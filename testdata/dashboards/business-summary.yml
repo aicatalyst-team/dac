@@ -1,0 +1,216 @@
+schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Business Summary
+description: Simple summary of sales and orders from the local DuckDB sample database
+connection: local_duckdb
+
+filters:
+  - name: region
+    type: select
+    multiple: false
+    default: "All"
+    options:
+      values: ["All", "North America", "Europe", "APAC"]
+  - name: date_range
+    type: date-range
+    default: all_time
+
+queries:
+  total_revenue:
+    sql: |
+      SELECT COALESCE(SUM(amount), 0) AS value
+      FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      {% if filters.region != 'All' %}
+        AND region = '{{ filters.region }}'
+      {% endif %}
+
+  total_sales:
+    sql: |
+      SELECT COUNT(*) AS value
+      FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      {% if filters.region != 'All' %}
+        AND region = '{{ filters.region }}'
+      {% endif %}
+
+  total_orders:
+    sql: |
+      SELECT COUNT(*) AS value
+      FROM orders
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+
+  average_order_value:
+    sql: |
+      SELECT ROUND(COALESCE(AVG(amount), 0), 2) AS value
+      FROM orders
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+
+  revenue_per_sale:
+    sql: |
+      SELECT ROUND(COALESCE(SUM(amount) / NULLIF(COUNT(*), 0), 0), 2) AS value
+      FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      {% if filters.region != 'All' %}
+        AND region = '{{ filters.region }}'
+      {% endif %}
+
+  revenue_by_month:
+    sql: |
+      SELECT
+        STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+        SUM(amount) AS revenue
+      FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      {% if filters.region != 'All' %}
+        AND region = '{{ filters.region }}'
+      {% endif %}
+      GROUP BY 1
+      ORDER BY 1
+
+  orders_by_status:
+    sql: |
+      SELECT
+        status,
+        COUNT(*) AS orders
+      FROM orders
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      GROUP BY 1
+      ORDER BY 2 DESC
+
+  revenue_by_region:
+    sql: |
+      SELECT
+        region,
+        SUM(amount) AS revenue
+      FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      {% if filters.region != 'All' %}
+        AND region = '{{ filters.region }}'
+      {% endif %}
+      GROUP BY 1
+      ORDER BY 2 DESC
+
+  revenue_by_channel:
+    sql: |
+      SELECT
+        channel,
+        SUM(amount) AS revenue
+      FROM sales
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      {% if filters.region != 'All' %}
+        AND region = '{{ filters.region }}'
+      {% endif %}
+      GROUP BY 1
+      ORDER BY 2 DESC
+
+  recent_orders:
+    sql: |
+      SELECT
+        id,
+        customer_name,
+        status,
+        payment_method,
+        amount,
+        created_at
+      FROM orders
+      WHERE created_at >= '{{ filters.date_range.start }}'
+        AND created_at < DATE '{{ filters.date_range.end }}' + INTERVAL 1 DAY
+      ORDER BY created_at DESC, id DESC
+      LIMIT 15
+
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        query: total_revenue
+        column: value
+        prefix: "$"
+        format: currency
+        col: 3
+      - name: Sales
+        type: metric
+        query: total_sales
+        column: value
+        format: number
+        col: 2
+      - name: Orders
+        type: metric
+        query: total_orders
+        column: value
+        format: number
+        col: 2
+      - name: Average Order Value
+        type: metric
+        query: average_order_value
+        column: value
+        prefix: "$"
+        format: currency
+        col: 3
+      - name: Revenue / Sale
+        type: metric
+        query: revenue_per_sale
+        column: value
+        prefix: "$"
+        format: currency
+        col: 2
+
+  - widgets:
+      - name: Revenue by Month
+        type: chart
+        chart: area
+        query: revenue_by_month
+        x: month
+        y: [revenue]
+        col: 8
+      - name: Orders by Status
+        type: chart
+        chart: pie
+        query: orders_by_status
+        label: status
+        value: orders
+        col: 4
+
+  - widgets:
+      - name: Revenue by Region
+        type: chart
+        chart: bar
+        query: revenue_by_region
+        x: region
+        y: [revenue]
+        col: 6
+      - name: Revenue by Channel
+        type: chart
+        chart: bar
+        query: revenue_by_channel
+        x: channel
+        y: [revenue]
+        col: 6
+
+  - widgets:
+      - name: Recent Orders
+        type: table
+        query: recent_orders
+        col: 12
+        columns:
+          - name: id
+            label: Order ID
+          - name: customer_name
+            label: Customer
+          - name: status
+            label: Status
+          - name: payment_method
+            label: Payment Method
+          - name: amount
+            label: Amount
+            format: currency
+          - name: created_at
+            label: Order Date

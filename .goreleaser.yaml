@@ -1,0 +1,61 @@
+version: 2
+
+release:
+  prerelease: auto
+  make_latest: "{{ if .Prerelease }}false{{ else }}true{{ end }}"
+  target_commitish: "{{ .Commit }}"
+
+before:
+  hooks:
+    - go mod tidy
+    - npm --prefix frontend ci --legacy-peer-deps
+
+builds:
+  - id: dac
+    binary: dac
+    main: ./
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    hooks:
+      pre:
+        - npm --prefix frontend run build
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.telemetryKey={{ if index .Env "TELEMETRY_KEY" }}{{ .Env.TELEMETRY_KEY }}{{ end }}
+
+archives:
+  - id: dac-archives
+    ids:
+      - dac
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Bruin CLI
+        shell: bash
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/bruin-data/bruin/main/install.sh | bash -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Warm Bruin query runtime
+        shell: bash
+        run: |
+          bruin query --output json --config-file examples/basic-yaml/.bruin.yml -c local_duckdb -q "SELECT 1 AS value" > /tmp/bruin-warmup.out
+          tail -n 1 /tmp/bruin-warmup.out | python3 -c 'import json, sys; data=json.load(sys.stdin); assert len(data["rows"]) > 0'
+          if [ -d "$HOME/.bruin" ]; then
+            echo "$HOME/.bruin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Install DAC dependencies
+        run: make deps
+
+      - name: Run tests
+        run: make test
+
+      - name: Build DAC
+        run: make build
+
+      - name: Run init smoke test
+        shell: bash
+        run: |
+          ./bin/dac init /tmp/dac-init-smoke
+          ./bin/dac validate --dir /tmp/dac-init-smoke
+          ./bin/dac query --dir /tmp/dac-init-smoke --dashboard "Semantic Sales" --widget "Revenue" --output json > /tmp/init-semantic.json
+          python3 -c 'import json; data=json.load(open("/tmp/init-semantic.json")); assert len(data["rows"]) > 0'
+
+          ./bin/dac init /tmp/dac-init-tsx --template tsx
+          ./bin/dac validate --dir /tmp/dac-init-tsx
+
+      - name: Validate example projects
+        shell: bash
+        run: |
+          ./bin/dac validate --dir examples/basic-yaml
+          ./bin/dac validate --dir examples/basic-tsx
+          ./bin/dac validate --dir examples/semantic-yaml
+          ./bin/dac validate --dir examples/semantic-tsx
+
+      - name: Run example query smoke tests
+        shell: bash
+        run: |
+          ./bin/dac query --dir examples/basic-yaml --dashboard "Sales Analytics" --widget "Total Revenue" --output json > /tmp/basic-yaml.json
+          python3 -c 'import json; data=json.load(open("/tmp/basic-yaml.json")); assert len(data["rows"]) > 0'
+
+          ./bin/dac query --dir examples/basic-tsx --dashboard "Sales (TSX)" --widget "Revenue by Region" --output json > /tmp/basic-tsx.json
+          python3 -c 'import json; data=json.load(open("/tmp/basic-tsx.json")); assert len(data["rows"]) > 0'
+
+          ./bin/dac query --dir examples/semantic-yaml --dashboard "Semantic Sales Example" --widget "Revenue" --output json > /tmp/semantic-yaml.json
+          python3 -c 'import json; data=json.load(open("/tmp/semantic-yaml.json")); assert len(data["rows"]) > 0'
+
+          ./bin/dac query --dir examples/semantic-tsx --dashboard "Semantic Sales TSX Example" --widget "Revenue" --output json > /tmp/semantic-tsx.json
+          python3 -c 'import json; data=json.load(open("/tmp/semantic-tsx.json")); assert len(data["rows"]) > 0'
+
+      - name: Run server smoke test
+        shell: bash
+        run: |
+          port=9831
+          ./bin/dac serve --dir examples/basic-yaml --host 127.0.0.1 --port "${port}" > /tmp/dac-serve.log 2>&1 &
+          pid=$!
+          trap 'kill $pid >/dev/null 2>&1 || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:${port}/api/v1/dashboards" > /tmp/dashboards.json; then
+              break
+            fi
+            sleep 1
+          done
+
+          python3 -c 'import json; data=json.load(open("/tmp/dashboards.json")); assert any(d["name"] == "Sales Analytics" for d in data["dashboards"])'
+          kill $pid
+          wait $pid || true
+
+      - name: Run installer smoke test
+        shell: bash
+        run: |
+          tag="v0.0.0-ci-smoke"
+          tmpdir="$(mktemp -d)"
+          mkdir -p "${tmpdir}/download/${tag}"
+          tar -czf "${tmpdir}/download/${tag}/dac_Linux_x86_64.tar.gz" -C bin dac
+          DAC_DOWNLOAD_BASE_URL="file://${tmpdir}/download" ./install.sh -b "${tmpdir}/bin" "${tag}"
+          "${tmpdir}/bin/dac" version

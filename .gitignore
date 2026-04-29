@@ -1,0 +1,14 @@
+logs/queries
+bin/
+web/
+frontend/dist/
+frontend/node_modules/
+.bruin.yml
+*.db
+!examples/**/.bruin.yml
+!examples/data/test.db
+.sessions/
+tmp/
+.gocache
+dist/
+cover.out
