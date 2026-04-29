@@ -91,6 +91,27 @@ make dev
 
 The main development commands are defined in the [`Makefile`](Makefile). Use `make` targets rather than ad-hoc `go build` or `npm run build` commands so frontend embedding and build flags stay consistent.
 
+## Telemetry
+
+DAC sends anonymous usage events to help us understand which commands are used and where they fail. Each event includes the command name, run duration, OS/architecture, DAC version, and an anonymous install ID stored at `~/.dac/telemetry.json`.
+
+We do not collect:
+
+- SQL queries, query results, or row counts
+- Dashboard or widget contents, names, or file paths
+- Connection names, hosts, credentials, project IDs, or dataset names
+- Any environment variables or shell history
+
+To disable telemetry, set either of these environment variables:
+
+```bash
+export TELEMETRY_OPTOUT=1
+# or the industry-standard:
+export DO_NOT_TRACK=1
+```
+
+Builds without a telemetry write key (the default for `make build`) are silent and send nothing.
+
 ## Documentation
 
 - Docs source: [`docs/`](docs)

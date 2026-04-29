@@ -3,7 +3,8 @@ BUILD_DIR ?= bin
 BUILD_SRC=.
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "")
-GO_LDFLAGS=-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
+TELEMETRY_KEY ?=
+GO_LDFLAGS=-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.telemetryKey=$(TELEMETRY_KEY)
 
 NO_COLOR=\033[0m
 OK_COLOR=\033[32;01m

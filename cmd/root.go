@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 
+	"github.com/bruin-data/dac/pkg/telemetry"
 	"github.com/urfave/cli/v3"
 )
 
@@ -13,6 +14,15 @@ var frontendFS fs.FS
 type BuildInfo struct {
 	Version string
 	Commit  string
+}
+
+// withTelemetry attaches telemetry Before/After hooks to a command. Hooks are
+// attached per-subcommand (matching Bruin CLI) so they only fire when a real
+// command runs, not on `dac --help` or `dac --version`.
+func withTelemetry(c *cli.Command) *cli.Command {
+	c.Before = telemetry.BeforeCommand
+	c.After = telemetry.AfterCommand
+	return c
 }
 
 func NewApp(build BuildInfo) *cli.Command {
@@ -37,16 +47,16 @@ func NewApp(build BuildInfo) *cli.Command {
 			},
 		},
 		Commands: []*cli.Command{
-			initCmd(),
-			serveCmd(),
-			buildCmd(),
-			validateCmd(),
-			checkCmd(),
-			queryCmd(),
-			lsCmd(),
-			connectionsCmd(),
-			skillsCmd(),
-			exportCmd(),
+			withTelemetry(initCmd()),
+			withTelemetry(serveCmd()),
+			withTelemetry(buildCmd()),
+			withTelemetry(validateCmd()),
+			withTelemetry(checkCmd()),
+			withTelemetry(queryCmd()),
+			withTelemetry(lsCmd()),
+			withTelemetry(connectionsCmd()),
+			withTelemetry(skillsCmd()),
+			withTelemetry(exportCmd()),
 			versionCmd(build),
 		},
 	}

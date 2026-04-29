@@ -9,6 +9,8 @@ import (
 	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/bruin-data/dac/pkg/query"
 	"github.com/bruin-data/dac/pkg/server"
+	"github.com/bruin-data/dac/pkg/telemetry"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/urfave/cli/v3"
 )
 
@@ -43,6 +45,9 @@ func checkCmd() *cli.Command {
 			if err != nil {
 				return err
 			}
+			telemetry.SendEvent("dashboards_loaded", analytics.Properties{
+				"count": len(dashboards),
+			})
 			if dashboards == nil {
 				fmt.Println("No dashboard files found in", dir)
 				return nil

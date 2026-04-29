@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 
+	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/bruin-data/dac/pkg/server"
+	"github.com/bruin-data/dac/pkg/telemetry"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/urfave/cli/v3"
 )
 
@@ -62,6 +65,16 @@ func serveCmd() *cli.Command {
 			if err != nil {
 				return err
 			}
+
+			dashboardCount := -1
+			if dashboards, err := dashboard.LoadDir(dir); err == nil {
+				dashboardCount = len(dashboards)
+			}
+			telemetry.SendEvent("serve_started", analytics.Properties{
+				"port":            int(cmd.Int("port")),
+				"template":        cmd.String("template"),
+				"dashboard_count": dashboardCount,
+			})
 
 			return srv.Start()
 		},
