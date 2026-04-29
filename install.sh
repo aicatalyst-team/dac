@@ -9,6 +9,7 @@ GITHUB_API_URL=${DAC_GITHUB_API_URL:-https://api.github.com}
 DOWNLOAD_BASE_URL=${DAC_DOWNLOAD_BASE_URL:-${GITHUB_BASE_URL}/${OWNER}/${REPO}/releases/download}
 LATEST_RELEASE_URL=${DAC_LATEST_RELEASE_URL:-${GITHUB_BASE_URL}/${OWNER}/${REPO}/releases/latest}
 EDGE_RELEASES_API_URL=${DAC_EDGE_RELEASES_API_URL:-${GITHUB_API_URL}/repos/${OWNER}/${REPO}/releases?per_page=30}
+BRUIN_INSTALL_URL=${DAC_BRUIN_INSTALL_URL:-https://getbruin.com/install/cli}
 
 usage() {
   cat <<EOF
@@ -23,6 +24,9 @@ Options:
   --channel stable|edge     install from the stable or edge channel (default: stable)
 
 If tag is omitted, the latest release in the selected channel is installed.
+
+Environment:
+  DAC_SKIP_BRUIN_INSTALL=1  skip installing the Bruin CLI
 EOF
   exit 2
 }
@@ -160,6 +164,28 @@ download() {
   exit 1
 }
 
+install_bruin_cli() {
+  if [ "${DAC_SKIP_BRUIN_INSTALL:-0}" = "1" ]; then
+    debug "skipping Bruin CLI install because DAC_SKIP_BRUIN_INSTALL=1"
+    return
+  fi
+
+  if command -v bruin >/dev/null 2>&1; then
+    debug "Bruin CLI already installed at $(command -v bruin)"
+    return
+  fi
+
+  bruin_tmpdir=$(mktemp -d)
+  trap 'rm -rf "$bruin_tmpdir"' EXIT INT TERM
+
+  log "Installing Bruin CLI..."
+  download "$BRUIN_INSTALL_URL" "$bruin_tmpdir/install-bruin.sh"
+  sh "$bruin_tmpdir/install-bruin.sh" -b "$BINDIR"
+
+  trap - EXIT INT TERM
+  rm -rf "$bruin_tmpdir"
+}
+
 resolve_tag() {
   if [ -n "$TAG" ]; then
     VERSION_TAG=$TAG
@@ -272,6 +298,7 @@ install_binary() {
 main() {
   parse_args "$@"
   detect_platform
+  install_bruin_cli
   resolve_tag
   install_binary
   log ""

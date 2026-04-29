@@ -27,7 +27,7 @@ Install the latest edge build from `main`:
 curl -fsSL https://raw.githubusercontent.com/bruin-data/dac/main/install.sh | bash -s -- --channel edge
 ```
 
-DAC uses your existing Bruin connections and currently shells out to `bruin query` for query execution. Install the Bruin CLI as well if you want to run `dac serve`, `dac query`, or `dac check` against live data.
+DAC uses your existing Bruin connections and currently shells out to `bruin query` for query execution. The install script installs the Bruin CLI first when `bruin` is not already available on your `PATH`.
 
 ## Quickstart
 

@@ -8,9 +8,9 @@ DAC is released as standalone binaries through GitHub Releases.
 curl -fsSL https://raw.githubusercontent.com/bruin-data/dac/main/install.sh | bash
 ```
 
-The installer downloads the latest GitHub release for your platform and installs `dac` into `~/.local/bin` by default.
+The installer installs the Bruin CLI first if `bruin` is not already available on your `PATH`, then downloads the latest DAC GitHub release for your platform and installs `dac` into `~/.local/bin` by default.
 
-DAC uses `.bruin.yml` connections and currently shells out to `bruin query` to execute dashboard SQL. Install the Bruin CLI too if you plan to run live queries locally.
+DAC uses `.bruin.yml` connections and currently shells out to `bruin query` to execute dashboard SQL.
 
 To install the latest edge build from `main`:
 
