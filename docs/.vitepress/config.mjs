@@ -3,6 +3,7 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "DAC",
   description: "Dashboard-as-Code: define, validate, and serve dashboards from YAML and TSX",
+  base: "/dac/",
   themeConfig: {
     outline: "deep",
     search: {
