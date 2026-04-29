@@ -8,6 +8,8 @@ DAC is a Dashboard-as-Code tool for defining, validating, and serving dashboards
 
 It is built for AI agents to build dashboards in a reliable and reviewable way.
 
+![DAC dashboard demo](resources/dac_optimized.gif)
+
 <table>
 <thead>
 <tr>
@@ -118,6 +120,7 @@ The repository includes four self-contained example projects under [`examples/`]
 ├── frontend/    React frontend embedded into the DAC binary
 ├── docs/        VitePress documentation source
 ├── examples/    Runnable example projects for YAML, TSX, and semantic dashboards
+├── resources/   README and documentation assets
 └── testdata/    Internal fixtures used by tests
 ```
 
