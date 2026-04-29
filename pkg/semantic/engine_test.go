@@ -129,18 +129,18 @@ func TestLoadFile_RejectsInvalidModel(t *testing.T) {
 	}
 }
 
-func TestLoadFile_RejectsModelWithoutSchema(t *testing.T) {
+func TestLoadFile_DefaultsModelSchemaToV1(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sales.yml")
 	if err := os.WriteFile(path, []byte("name: sales\nsource:\n  table: sales\n"), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	_, err := LoadFile(path)
-	if err == nil {
-		t.Fatal("expected schema validation error")
+	model, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load model without schema: %v", err)
 	}
-	if !strings.Contains(err.Error(), "schema validation failed") {
-		t.Fatalf("expected schema validation error, got %v", err)
+	if model.Schema != "https://getbruin.com/schemas/dac/semantic-model/v1" {
+		t.Fatalf("expected default schema v1, got %q", model.Schema)
 	}
 }
 

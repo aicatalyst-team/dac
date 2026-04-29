@@ -53,7 +53,6 @@ A dashboard is a `.yml` or `.dashboard.tsx` file in your repo. You describe widg
 There is no GUI builder, no visual editor, and no separate dashboard service to operate. The source file is the source of truth — review it in pull requests, deploy it like any other code.
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Sales Overview
 connection: warehouse
 

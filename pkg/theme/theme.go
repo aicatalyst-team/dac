@@ -29,6 +29,9 @@ func LoadFile(path string) (Theme, error) {
 	if err := yaml.Unmarshal(data, &t); err != nil {
 		return Theme{}, fmt.Errorf("parsing theme file %s: %w", path, err)
 	}
+	if t.Schema == "" {
+		t.Schema = schemas.ThemeV1ID
+	}
 	if t.Name == "" {
 		return Theme{}, fmt.Errorf("theme file %s: missing 'name' field", path)
 	}

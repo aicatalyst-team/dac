@@ -113,6 +113,9 @@ func loadFileWithContext(path string, paths ProjectPaths, semanticModels semanti
 	if err := yaml.Unmarshal(data, &d); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
+	if d.Schema == "" {
+		d.Schema = schemas.DashboardV1ID
+	}
 
 	d.FilePath = path
 	d.FileType = "yaml"

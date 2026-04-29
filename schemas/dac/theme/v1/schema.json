@@ -3,7 +3,7 @@
   "$id": "https://getbruin.com/schemas/dac/theme/v1",
   "title": "Bruin DAC Theme",
   "type": "object",
-  "required": ["schema", "name", "tokens"],
+  "required": ["name", "tokens"],
   "properties": {
     "schema": {
       "const": "https://getbruin.com/schemas/dac/theme/v1"

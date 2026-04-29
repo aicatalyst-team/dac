@@ -3,7 +3,6 @@ package theme
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -20,17 +19,17 @@ func TestLoadFile_ValidatesThemeSchema(t *testing.T) {
 	}
 }
 
-func TestLoadFile_RejectsThemeWithoutSchema(t *testing.T) {
+func TestLoadFile_DefaultsThemeSchemaToV1(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "theme.yml")
 	if err := os.WriteFile(path, []byte("name: missing-schema\ntokens:\n  background: '#fff'\n"), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	_, err := LoadFile(path)
-	if err == nil {
-		t.Fatal("expected schema validation error")
+	tm, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load theme without schema: %v", err)
 	}
-	if !strings.Contains(err.Error(), "schema validation failed") {
-		t.Fatalf("expected schema validation error, got %v", err)
+	if tm.Schema != "https://getbruin.com/schemas/dac/theme/v1" {
+		t.Fatalf("expected default schema v1, got %q", tm.Schema)
 	}
 }

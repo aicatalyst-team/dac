@@ -15,7 +15,7 @@ import (
 
 // Shared dashboard schema reference used by both prompts.
 const dashboardSchemaRef = `Dashboard YAML structure:
-- schema: https://getbruin.com/schemas/dac/dashboard/v1
+- schema: optional; v1 is assumed when omitted
 - name, description, connection (default DB connection)
 - filters: [{name, type (select|date-range), default, options}]
 - queries: named reusable SQL queries (sql: inline | file: path.sql)

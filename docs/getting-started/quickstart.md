@@ -28,7 +28,7 @@ The generated dashboards include inline sample data, so there is no separate see
 dac validate --dir .
 ```
 
-Validation checks dashboard YAML, semantic model YAML, schema URLs, semantic references, and dashboard structure before anything is served.
+Validation checks dashboard YAML, semantic model YAML, schema versions, semantic references, and dashboard structure before anything is served. When `schema` is omitted, DAC assumes v1.
 
 ## 3. Inspect a Widget Query
 

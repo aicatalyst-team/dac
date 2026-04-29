@@ -3,7 +3,7 @@
   "$id": "https://getbruin.com/schemas/dac/semantic-model/v1",
   "title": "Bruin DAC Semantic Model",
   "type": "object",
-  "required": ["schema", "name", "source"],
+  "required": ["name", "source"],
   "properties": {
     "schema": {
       "const": "https://getbruin.com/schemas/dac/semantic-model/v1"

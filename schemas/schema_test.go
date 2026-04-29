@@ -57,6 +57,54 @@ tokens:
 	}
 }
 
+func TestSchemasAllowMissingSchema(t *testing.T) {
+	cases := []struct {
+		name     string
+		schemaID string
+		yaml     string
+	}{
+		{
+			name:     "dashboard",
+			schemaID: DashboardV1ID,
+			yaml: `name: Minimal
+rows:
+  - widgets:
+      - name: One
+        type: metric
+        sql: SELECT 1 AS value
+        column: value
+`,
+		},
+		{
+			name:     "semantic model",
+			schemaID: SemanticModelV1ID,
+			yaml: `name: sales
+source:
+  table: sales
+metrics:
+  - name: revenue
+    expression: sum(amount)
+`,
+		},
+		{
+			name:     "theme",
+			schemaID: ThemeV1ID,
+			yaml: `name: corporate
+tokens:
+  background: "#ffffff"
+`,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateYAML(tt.schemaID, []byte(tt.yaml)); err != nil {
+				t.Fatalf("expected valid %s without schema: %v", tt.name, err)
+			}
+		})
+	}
+}
+
 func TestSchemasRejectInvalidDocuments(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -64,9 +112,10 @@ func TestSchemasRejectInvalidDocuments(t *testing.T) {
 		yaml     string
 	}{
 		{
-			name:     "dashboard missing schema",
+			name:     "dashboard wrong schema",
 			schemaID: DashboardV1ID,
-			yaml: `name: Missing Schema
+			yaml: `schema: https://getbruin.com/schemas/dac/dashboard/v2
+name: Wrong Schema
 rows:
   - widgets:
       - name: One

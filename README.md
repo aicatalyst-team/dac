@@ -57,6 +57,69 @@ If you cloned the repository and have `dac` installed, you can also run one of t
 dac serve --dir examples/basic-yaml
 ```
 
+## Dashboard Examples
+
+<table>
+<thead>
+<tr>
+<th>YAML</th>
+<th>TSX</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+
+<pre><code class="language-yaml">name: Sales Overview
+connection: warehouse
+
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        sql: SELECT SUM(amount) AS value FROM sales
+        column: value
+        prefix: "$"
+        col: 4</code></pre>
+
+</td>
+<td>
+
+<pre><code class="language-tsx">export default (
+  &lt;Dashboard name="Simple Dashboard" connection="my_db"&gt;
+    &lt;Row&gt;
+      &lt;Metric
+        name="Total Revenue"
+        col={4}
+        sql="SELECT SUM(amount) AS value FROM sales"
+        column="value"
+        prefix="$"
+        format="number"
+      /&gt;
+      &lt;Chart
+        name="Revenue Over Time"
+        chart="area"
+        col={8}
+        sql={`
+          SELECT
+            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
+            SUM(amount) AS revenue
+          FROM sales
+          GROUP BY 1
+          ORDER BY 1
+        `}
+        x="month"
+        y={["revenue"]}
+      /&gt;
+    &lt;/Row&gt;
+  &lt;/Dashboard&gt;
+)</code></pre>
+
+</td>
+</tr>
+</tbody>
+</table>
+
 ## Examples
 
 The repository includes four self-contained example projects under [`examples/`](examples):

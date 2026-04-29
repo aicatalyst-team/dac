@@ -3,7 +3,7 @@
   "$id": "https://getbruin.com/schemas/dac/dashboard/v1",
   "title": "Bruin DAC Dashboard",
   "type": "object",
-  "required": ["schema", "name", "rows"],
+  "required": ["name", "rows"],
   "properties": {
     "schema": {
       "const": "https://getbruin.com/schemas/dac/dashboard/v1"

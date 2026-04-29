@@ -67,7 +67,6 @@ Prefer `read_only: true` for DuckDB dashboards unless the project explicitly nee
 ## YAML Dashboard
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Sales
 description: Revenue and customer activity
 connection: local_duckdb
@@ -144,7 +143,6 @@ SQL files can be referenced with `file: queries/revenue.sql`, relative to the da
 Semantic models live in `semantic/*.yml`.
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/semantic-model/v1
 name: sales
 label: Sales
 source:
@@ -182,7 +180,6 @@ Metrics are aggregate SQL expressions or expressions over other metrics using `{
 ## Semantic Dashboard
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Semantic Sales
 connection: local_duckdb
 model: sales

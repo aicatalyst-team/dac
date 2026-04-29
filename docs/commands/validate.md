@@ -25,7 +25,7 @@ dac validate --dir ./dashboards
 ## What It Checks
 
 - **Dashboard**: `name` is required, at least one row
-- **Schemas**: YAML dashboards, semantic models, and themes match their declared Bruin schema IDs
+- **Schemas**: YAML dashboards, semantic models, and themes match the v1 Bruin schema for their file type; explicit `schema` values must be v1
 - **Rows**: at least one widget per row
 - **Widgets**: `type` and `name` are required
 - **Grid**: column spans are 1-12, row totals don't exceed 12

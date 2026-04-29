@@ -24,6 +24,9 @@ func parseFile(path string) (*Model, error) {
 	if err := yaml.Unmarshal(data, &model); err != nil {
 		return nil, fmt.Errorf("parsing semantic model YAML: %w", err)
 	}
+	if model.Schema == "" {
+		model.Schema = schemas.SemanticModelV1ID
+	}
 
 	return &model, nil
 }

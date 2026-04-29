@@ -37,7 +37,6 @@ dac serve --dir examples/semantic-tsx
 Example `semantic/sales.yml`:
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/semantic-model/v1
 name: sales
 label: Sales
 description: Semantic model over the sales table
@@ -82,7 +81,7 @@ segments:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `schema` | string | Yes | `https://getbruin.com/schemas/dac/semantic-model/v1` |
+| `schema` | string | No | Optional schema ID. Defaults to `https://getbruin.com/schemas/dac/semantic-model/v1` when omitted |
 | `name` | string | Yes | Model name used by dashboards |
 | `label` | string | No | Display label |
 | `description` | string | No | Model description |
@@ -154,7 +153,6 @@ Segments are named SQL predicates reused by dashboards.
 Set a default model for the whole dashboard:
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Semantic Sales Example
 connection: local_duckdb
 model: sales
@@ -165,7 +163,6 @@ Widgets and named queries then inherit `sales` unless they set their own `model`
 You can also define aliases with `models`. This is useful when a dashboard references multiple models or when you want stable dashboard-facing names:
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Executive Sales
 connection: warehouse
 model: sales_model

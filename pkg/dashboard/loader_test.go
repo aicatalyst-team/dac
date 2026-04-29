@@ -65,7 +65,7 @@ func TestLoadFile_NonexistentFile(t *testing.T) {
 	assertErr(t, err)
 }
 
-func TestLoadFile_RejectsDashboardWithoutSchema(t *testing.T) {
+func TestLoadFile_DefaultsDashboardSchemaToV1(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dashboard.yml")
 	assertNoErr(t, os.WriteFile(path, []byte(`name: Missing Schema
 rows:
@@ -75,10 +75,10 @@ rows:
         content: Hello
 `), 0o644))
 
-	_, err := LoadFile(path)
-	assertErr(t, err)
-	if !strings.Contains(err.Error(), "schema validation failed") {
-		t.Fatalf("expected schema validation error, got %v", err)
+	d, err := LoadFile(path)
+	assertNoErr(t, err)
+	if d.Schema != "https://getbruin.com/schemas/dac/dashboard/v1" {
+		t.Fatalf("expected default schema v1, got %q", d.Schema)
 	}
 }
 

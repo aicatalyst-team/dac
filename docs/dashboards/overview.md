@@ -25,7 +25,6 @@ DAC supports two dashboard formats:
 Best for declarative dashboards with static structure.
 
 ```yaml
-schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Sales Overview
 connection: my_db
 
