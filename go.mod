@@ -3,12 +3,16 @@ module github.com/bruin-data/dac
 go 1.25.0
 
 require (
+	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/dop251/goja v0.0.0-20260305124333-6a7976c22267
 	github.com/dustin/go-humanize v1.0.1
 	github.com/evanw/esbuild v0.27.3
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/google/uuid v1.6.0
 	github.com/nikolalohinski/gonja/v2 v2.7.0
+	github.com/rudderlabs/analytics-go/v4 v4.2.3
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/spf13/afero v1.15.0
 	github.com/urfave/cli/v3 v3.7.0
 	github.com/wcharczuk/go-chart/v2 v2.1.2
 	golang.org/x/oauth2 v0.36.0
@@ -29,13 +33,14 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.14 // indirect
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
+	github.com/grafana/jsonparser v0.0.0-20250908162026-5c2524e07b4c // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/segmentio/backo-go v1.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect

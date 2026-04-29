@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bruin-data/dac/pkg/telemetry"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/urfave/cli/v3"
 )
 
@@ -50,6 +52,10 @@ func initCmd() *cli.Command {
 
 func runInit(target, template string, force bool) error {
 	template = normalizeInitTemplate(template)
+	telemetry.SetTemplateName(template)
+	telemetry.SendEvent("template_selected", analytics.Properties{
+		"template": template,
+	})
 	files, err := initTemplateFiles(template)
 	if err != nil {
 		return err

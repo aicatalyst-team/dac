@@ -9,9 +9,12 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/bruin-data/dac/pkg/config"
 	"github.com/bruin-data/dac/pkg/dashboard"
 	"github.com/bruin-data/dac/pkg/query"
 	"github.com/bruin-data/dac/pkg/server"
+	"github.com/bruin-data/dac/pkg/telemetry"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/urfave/cli/v3"
 )
 
@@ -50,24 +53,26 @@ func queryCmd() *cli.Command {
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			dir := cmd.String("dir")
 
-			configFile, _, err := resolveConfig(cmd, dir)
+			configFile, cfg, err := resolveConfig(cmd, dir)
 			if err != nil {
 				return fmt.Errorf("config error: %w", err)
 			}
 
 			backend := newBackend(cmd, configFile)
 
-			var sql, connection string
+			var sql, connection, source string
 
 			dashboardName := cmd.String("dashboard")
 			widgetName := cmd.String("widget")
 
 			if dashboardName != "" && widgetName != "" {
+				source = "dashboard"
 				sql, connection, err = resolveWidgetQuery(dir, dashboardName, widgetName)
 				if err != nil {
 					return err
 				}
 			} else if cmd.String("file") != "" {
+				source = "file"
 				data, err := os.ReadFile(cmd.String("file"))
 				if err != nil {
 					return fmt.Errorf("reading SQL file: %w", err)
@@ -75,6 +80,7 @@ func queryCmd() *cli.Command {
 				sql = string(data)
 				connection = cmd.String("connection")
 			} else if cmd.Args().Len() > 0 {
+				source = "inline"
 				sql = strings.Join(cmd.Args().Slice(), " ")
 				connection = cmd.String("connection")
 			} else {
@@ -85,14 +91,41 @@ func queryCmd() *cli.Command {
 				return fmt.Errorf("no connection specified: use --connection or run against a dashboard widget")
 			}
 
-			result, err := backend.Execute(ctx, connection, sql)
-			if err != nil {
-				return fmt.Errorf("query failed: %w", err)
+			result, execErr := backend.Execute(ctx, connection, sql)
+			telemetry.SendEvent("query_executed", analytics.Properties{
+				"source":          source,
+				"output":          cmd.String("output"),
+				"connection_type": connectionType(cfg, cmd.Root().String("environment"), connection),
+				"success":         execErr == nil,
+			})
+			if execErr != nil {
+				return fmt.Errorf("query failed: %w", execErr)
 			}
 
 			return printResult(result, cmd.String("output"))
 		},
 	}
+}
+
+// connectionType resolves a connection name to its type bucket (e.g. "duckdb",
+// "bigquery") for telemetry. Returns empty string if not found — telemetry is
+// best-effort and never blocks the user's query.
+func connectionType(cfg *config.Config, environment, name string) string {
+	if cfg == nil {
+		return ""
+	}
+	env, err := cfg.GetEnvironment(environment)
+	if err != nil || env == nil {
+		return ""
+	}
+	for connType, conns := range env.Connections {
+		for _, c := range conns {
+			if c.Name == name {
+				return connType
+			}
+		}
+	}
+	return ""
 }
 
 // resolveWidgetQuery finds a widget in a dashboard and returns its resolved, templated SQL.

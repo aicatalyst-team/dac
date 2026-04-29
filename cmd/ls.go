@@ -6,6 +6,8 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/bruin-data/dac/pkg/telemetry"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/urfave/cli/v3"
 )
 
@@ -19,6 +21,11 @@ func lsCmd() *cli.Command {
 			if err != nil {
 				return err
 			}
+			telemetry.SendEvent("dashboards_loaded", analytics.Properties{
+				"count":         len(dashboards),
+				"valid_count":   len(dashboards),
+				"invalid_count": 0,
+			})
 			if dashboards == nil {
 				fmt.Println("No dashboard files found in", cmd.String("dir"))
 				return nil

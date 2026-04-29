@@ -32,7 +32,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }}
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.telemetryKey={{ if index .Env "TELEMETRY_KEY" }}{{ .Env.TELEMETRY_KEY }}{{ end }}
 
 archives:
   - id: dac-archives
