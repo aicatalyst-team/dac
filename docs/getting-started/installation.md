@@ -41,7 +41,7 @@ make deps
 make build
 ```
 
-The binary is output to `bin/dac`.
+The binary is output under the repository `bin/` directory. Add that directory to your `PATH` if you want to run it as `dac`.
 
 ## Verify Installation
 

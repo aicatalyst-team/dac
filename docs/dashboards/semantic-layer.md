@@ -28,8 +28,8 @@ Each semantic model is a separate `.yml` file under `semantic/`. Dashboard files
 Run the bundled examples from the repository root:
 
 ```shell
-./bin/dac serve --dir examples/semantic-yaml
-./bin/dac serve --dir examples/semantic-tsx
+dac serve --dir examples/semantic-yaml
+dac serve --dir examples/semantic-tsx
 ```
 
 ## Model Files
@@ -379,5 +379,5 @@ It fails dashboards that reference invalid semantic models, missing metrics, mis
 To inspect a compiled semantic widget by executing it:
 
 ```shell
-./bin/dac query --dir examples/semantic-yaml --dashboard "Semantic Sales Example" --widget "Revenue"
+dac query --dir examples/semantic-yaml --dashboard "Semantic Sales Example" --widget "Revenue"
 ```

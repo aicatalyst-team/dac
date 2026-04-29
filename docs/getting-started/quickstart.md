@@ -1,62 +1,58 @@
 # Quickstart
 
-Build your first dashboard in under 5 minutes.
+Create and run your first DAC project with `dac init`.
 
-DAC uses Bruin connections for query execution, so make sure `bruin` is installed and available on your `PATH` before starting.
-
-## 0. Try a Bundled Example
-
-If you cloned the repository, you can run one of the example projects immediately:
-
-```shell
-make deps
-make build
-./bin/dac serve --dir examples/basic-yaml
-```
-
-The curated examples live under `examples/`:
-
-- `examples/basic-yaml`
-- `examples/basic-tsx`
-- `examples/semantic-yaml`
-- `examples/semantic-tsx`
+DAC uses Bruin connections for query execution, so make sure both `dac` and `bruin` are installed and available on your `PATH` before starting.
 
 ## 1. Create a Project
-
-Use `dac init` to create a runnable starter project:
 
 ```shell
 dac init my-dashboards
 cd my-dashboards
 ```
 
-The starter includes a SQL-backed YAML dashboard, a semantic YAML dashboard, a `semantic/sales.yml` model, and a `.bruin.yml` DuckDB connection. The generated queries include inline sample data, so there is no separate seed step.
+The default starter creates a complete runnable project:
 
-## 2. Start the Server
+- `.bruin.yml` with a read-only DuckDB connection named `local_duckdb`
+- `data/dac-demo.duckdb` for local testing
+- `dashboards/sales.yml` for a regular SQL dashboard
+- `dashboards/semantic-sales.yml` for a semantic dashboard
+- `semantic/sales.yml` for the semantic model
+- `.claude/skills/create-dashboard/SKILL.md` and `.codex/skills/create-dashboard`
 
-```shell
-dac serve --dir . --open
-```
+The generated dashboards include inline sample data, so there is no separate seed step.
 
-The dashboards will be available at `http://localhost:8321`.
-
-## 3. Validate the Project
+## 2. Validate the Project
 
 ```shell
 dac validate --dir .
 ```
 
-## 4. Agent Skills
+Validation checks dashboard YAML, semantic model YAML, schema URLs, semantic references, and dashboard structure before anything is served.
 
-`dac init` installs DAC's local dashboard authoring skill automatically. It writes `.claude/skills/create-dashboard/SKILL.md` and links `.codex/skills/create-dashboard` to the same skill. Restart the agent session after initialization if you want Claude or Codex to pick it up.
+## 3. Inspect a Widget Query
 
-For existing projects, run `dac skills install --dir .`.
+```shell
+dac query --dir . --dashboard "Semantic Sales" --widget "Revenue"
+```
 
-## 5. Check Queries
+For semantic widgets, DAC compiles the semantic model reference into SQL in the backend before executing the query.
+
+## 4. Check All Widgets
 
 ```shell
 dac check --dir .
 ```
+
+`dac check` executes every query-backed widget and reports query failures before a viewer opens the dashboard.
+
+## 5. Start the Server
+
+```shell
+dac serve --dir . --open
+```
+
+The dashboard app will be available at `http://localhost:8321`.
 
 ## 6. Try Other Templates
 
@@ -68,24 +64,12 @@ dac init semantic-yaml --template semantic
 dac init semantic-tsx --template tsx
 ```
 
-## 7. Semantic Model Layout
+## 7. Existing Projects
 
-Semantic models live in a sibling `semantic/` directory and are referenced from dashboard widgets by model name:
-
-```text
-my-dashboards/
-├── .bruin.yml
-├── dashboards/
-│   └── semantic-sales.yml
-└── semantic/
-    └── sales.yml
-```
-
-You can try the bundled semantic example:
+If you already have a DAC project, install or refresh the bundled dashboard authoring skills with:
 
 ```shell
-./bin/dac validate --dir examples/semantic-yaml
-./bin/dac query --dir examples/semantic-yaml --dashboard "Semantic Sales Example" --widget "Revenue"
+dac skills install --dir .
 ```
 
 ## Next Steps

@@ -14,12 +14,10 @@ Each example is self-contained:
 From the repository root:
 
 ```bash
-make deps
-make build
-./bin/dac serve --dir examples/basic-yaml
+dac serve --dir examples/basic-yaml
 ```
 
-DAC uses Bruin connections for query execution, so install the `bruin` CLI too if you want to run these examples locally.
+DAC uses Bruin connections for query execution, so install both `dac` and `bruin` before running these examples locally.
 
 ## Included Projects
 

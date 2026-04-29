@@ -51,12 +51,10 @@ ls .codex/skills/create-dashboard
 
 For existing projects, run `dac skills install --dir .`.
 
-If you cloned the repository, you can also run one of the bundled example projects:
+If you cloned the repository and have `dac` installed, you can also run one of the bundled example projects:
 
 ```bash
-make deps
-make build
-./bin/dac serve --dir examples/basic-yaml
+dac serve --dir examples/basic-yaml
 ```
 
 ## Examples
