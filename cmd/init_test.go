@@ -32,6 +32,7 @@ func TestInitCommand_CreatesStarterProject(t *testing.T) {
 			t.Fatalf("expected %s to exist: %v", path, err)
 		}
 	}
+	assertGitRepository(t, dir)
 	config, err := os.ReadFile(filepath.Join(dir, ".bruin.yml"))
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -160,6 +161,24 @@ func TestInitCommand_ForceReplacesCodexSkillDirectoryWithSymlink(t *testing.T) {
 	assertCodexSkillSymlink(t, dir)
 }
 
+func TestInitGitRepository_MissingGitReturnsFriendlyError(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	err := initGitRepository(t.TempDir())
+	if err == nil {
+		t.Fatal("expected missing git error")
+	}
+	for _, want := range []string{
+		"git is required",
+		"Bruin uses the Git repository root",
+		"git init",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error to contain %q, got %v", want, err)
+		}
+	}
+}
+
 func TestInitCommand_RegisteredWithApp(t *testing.T) {
 	app := NewApp(BuildInfo{Version: "test"})
 	var found bool
@@ -184,7 +203,21 @@ func TestInitCommand_RunsThroughCLI(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "dashboards/semantic-sales.yml")); err != nil {
 		t.Fatalf("expected semantic dashboard: %v", err)
 	}
+	assertGitRepository(t, dir)
 	assertCodexSkillSymlink(t, dir)
+}
+
+func assertGitRepository(t *testing.T, dir string) {
+	t.Helper()
+
+	headPath := filepath.Join(dir, ".git", "HEAD")
+	data, err := os.ReadFile(headPath)
+	if err != nil {
+		t.Fatalf("expected generated project to be a git repository: %v", err)
+	}
+	if !strings.HasPrefix(string(data), "ref: refs/heads/") {
+		t.Fatalf("unexpected git HEAD content %q", data)
+	}
 }
 
 func assertCodexSkillSymlink(t *testing.T, dir string) {

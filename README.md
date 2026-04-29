@@ -1,17 +1,58 @@
 # DAC
 
 DAC is a Dashboard-as-Code tool for defining, validating, and serving dashboards from YAML and TSX.
+- Dynamic charts, tabs, loops and conditionals with TSX.
+- Built-in AI agent via Codex: chat with your dashboard live and get it updated.
+- Supports all the major databases: Postgres, MySQL, Snowflake, BigQuery, Redshift, Databricks, and more via [Bruin](https://github.com/bruin-data/bruin)
+- Built-in semantic layer: define metrics and dimensions once in `semantic/`, reference them from any widget. DAC generates the SQL.
 
-It is built for analytics engineers who want dashboards to live in version control, and for business users who need a fast, dense, browser-based view of the data.
+It is built for AI agents to build dashboards in a reliable and reviewable way.
 
-## What DAC Does
+<table>
+<thead>
+<tr>
+<th>TSX</th>
+<th>YAML</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
 
-- Define dashboards in YAML or TSX.
-- Reuse connections from `.bruin.yml`.
-- Validate dashboards and semantic models in CI before they break production.
-- Validate dashboard, semantic model, and theme YAML against versioned Bruin schemas.
-- Compile semantic widgets to SQL in the backend instead of inside dashboard files.
-- Serve a single embedded frontend from one DAC binary.
+<pre><code class="language-tsx">export default (
+  &lt;Dashboard name="Simple Dashboard" connection="my_db"&gt;
+    &lt;Row&gt;
+      &lt;Metric
+        name="Total Revenue"
+        col={4}
+        sql="SELECT SUM(amount) AS value FROM sales"
+        column="value"
+        prefix="$"
+        format="number"
+      /&gt;
+    &lt;/Row&gt;
+  &lt;/Dashboard&gt;
+)</code></pre>
+
+</td>
+<td>
+
+<pre><code class="language-yaml">name: Sales Overview
+connection: warehouse
+
+rows:
+  - widgets:
+      - name: Revenue
+        type: metric
+        sql: SELECT SUM(amount) AS value FROM sales
+        column: value
+        prefix: "$"
+        col: 4</code></pre>
+
+</td>
+</tr>
+</tbody>
+</table>
 
 ## Install
 
@@ -56,69 +97,6 @@ If you cloned the repository and have `dac` installed, you can also run one of t
 ```bash
 dac serve --dir examples/basic-yaml
 ```
-
-## Dashboard Examples
-
-<table>
-<thead>
-<tr>
-<th>YAML</th>
-<th>TSX</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-
-<pre><code class="language-yaml">name: Sales Overview
-connection: warehouse
-
-rows:
-  - widgets:
-      - name: Revenue
-        type: metric
-        sql: SELECT SUM(amount) AS value FROM sales
-        column: value
-        prefix: "$"
-        col: 4</code></pre>
-
-</td>
-<td>
-
-<pre><code class="language-tsx">export default (
-  &lt;Dashboard name="Simple Dashboard" connection="my_db"&gt;
-    &lt;Row&gt;
-      &lt;Metric
-        name="Total Revenue"
-        col={4}
-        sql="SELECT SUM(amount) AS value FROM sales"
-        column="value"
-        prefix="$"
-        format="number"
-      /&gt;
-      &lt;Chart
-        name="Revenue Over Time"
-        chart="area"
-        col={8}
-        sql={`
-          SELECT
-            STRFTIME(DATE_TRUNC('month', created_at), '%Y-%m') AS month,
-            SUM(amount) AS revenue
-          FROM sales
-          GROUP BY 1
-          ORDER BY 1
-        `}
-        x="month"
-        y={["revenue"]}
-      /&gt;
-    &lt;/Row&gt;
-  &lt;/Dashboard&gt;
-)</code></pre>
-
-</td>
-</tr>
-</tbody>
-</table>
 
 ## Examples
 

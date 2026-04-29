@@ -8,6 +8,8 @@ dac init [path] [flags]
 
 If `path` is omitted, DAC initializes the current directory.
 
+`dac init` initializes the generated project as a Git repository by default. Bruin uses the Git repository root for project discovery, so generated projects can run `dac query`, `dac check`, and `dac serve` immediately.
+
 ## Flags
 
 | Flag | Alias | Type | Default | Description |
@@ -37,6 +39,7 @@ The default `starter` template creates:
 
 ```text
 my-dashboards/
+├── .git/
 ├── .bruin.yml
 ├── .claude/
 │   └── skills/

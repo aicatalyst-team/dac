@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -111,6 +113,9 @@ func runInit(target, template string, force bool) error {
 			return fmt.Errorf("writing %s: %w", file.path, err)
 		}
 	}
+	if err := initGitRepository(targetAbs); err != nil {
+		return err
+	}
 
 	fmt.Printf("Created DAC project in %s\n", targetAbs)
 	fmt.Println()
@@ -121,6 +126,23 @@ func runInit(target, template string, force bool) error {
 	fmt.Println()
 	fmt.Println("If you want to execute live queries, make sure the Bruin CLI is installed and on your PATH.")
 
+	return nil
+}
+
+func initGitRepository(targetAbs string) error {
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = targetAbs
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return fmt.Errorf("git is required to initialize DAC projects because Bruin uses the Git repository root for project discovery. Install git, then run `git init` in %s", targetAbs)
+		}
+		msg := strings.TrimSpace(string(output))
+		if msg != "" {
+			return fmt.Errorf("initializing git repository: %w: %s", err, msg)
+		}
+		return fmt.Errorf("initializing git repository: %w", err)
+	}
 	return nil
 }
 
@@ -234,6 +256,8 @@ func initProjectReadme(template string) string {
 	return `# DAC Project
 
 This project was generated with ` + "`dac init`" + `.
+
+` + "`dac init`" + ` initialized this directory as a Git repository so Bruin can discover the project root immediately.
 
 ## Commands
 
