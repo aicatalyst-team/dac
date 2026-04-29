@@ -139,14 +139,16 @@ func TestValidate_InvalidExternalSemanticModelOnlyFailsReferencedDashboard(t *te
 	assertNoErr(t, os.MkdirAll(dashboardsDir, 0o755))
 	assertNoErr(t, os.MkdirAll(semanticDir, 0o755))
 
-	regularDashboard := `name: Regular Dashboard
+	regularDashboard := `schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Regular Dashboard
 rows:
   - widgets:
       - name: Notes
         type: text
         content: Hello
 `
-	semanticDashboard := `name: Semantic Dashboard
+	semanticDashboard := `schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Semantic Dashboard
 model: broken_sales
 rows:
   - widgets:
@@ -154,7 +156,13 @@ rows:
         type: metric
         metric: revenue
 `
-	invalidModel := `name: broken_sales
+	invalidModel := `schema: https://getbruin.com/schemas/dac/semantic-model/v1
+name: broken_sales
+source:
+  table: sales
+dimensions:
+  - name: revenue
+    type: string
 metrics:
   - name: revenue
     expression: sum(amount)

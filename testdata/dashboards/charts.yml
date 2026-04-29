@@ -1,3 +1,4 @@
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Chart Showcase
 description: Demonstrates all chart types using sales & orders data
 connection: local_duckdb

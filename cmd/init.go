@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,9 +12,13 @@ import (
 )
 
 type initFile struct {
-	path    string
-	content string
+	path          string
+	content       []byte
+	symlinkTarget string
 }
+
+//go:embed init_demo.duckdb
+var initDuckDB []byte
 
 func initCmd() *cli.Command {
 	return &cli.Command{
@@ -66,7 +71,7 @@ func runInit(target, template string, force bool) error {
 	var conflicts []string
 	for _, file := range files {
 		path := filepath.Join(targetAbs, filepath.FromSlash(file.path))
-		if _, err := os.Stat(path); err == nil {
+		if _, err := os.Lstat(path); err == nil {
 			conflicts = append(conflicts, file.path)
 		} else if err != nil && !os.IsNotExist(err) {
 			return err
@@ -78,10 +83,25 @@ func runInit(target, template string, force bool) error {
 
 	for _, file := range files {
 		path := filepath.Join(targetAbs, filepath.FromSlash(file.path))
+		if force {
+			if _, err := os.Lstat(path); err == nil {
+				if err := os.RemoveAll(path); err != nil {
+					return fmt.Errorf("removing existing %s: %w", file.path, err)
+				}
+			} else if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("creating directory for %s: %w", file.path, err)
 		}
-		if err := os.WriteFile(path, []byte(file.content), 0o644); err != nil {
+		if file.symlinkTarget != "" {
+			if err := os.Symlink(file.symlinkTarget, path); err != nil {
+				return fmt.Errorf("linking %s: %w", file.path, err)
+			}
+			continue
+		}
+		if err := os.WriteFile(path, file.content, 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", file.path, err)
 		}
 	}
@@ -115,35 +135,65 @@ func normalizeInitTemplate(template string) string {
 
 func initTemplateFiles(template string) ([]initFile, error) {
 	base := []initFile{
-		{path: ".bruin.yml", content: initBruinConfig},
-		{path: "README.md", content: initProjectReadme(template)},
-		{path: "data/.gitkeep", content: ""},
+		initTextFile(".bruin.yml", initBruinConfig),
+		initTextFile("README.md", initProjectReadme(template)),
+		{path: "data/dac-demo.duckdb", content: initDuckDB},
 	}
+	skillFiles, err := initSkillFiles()
+	if err != nil {
+		return nil, err
+	}
+	base = append(base, skillFiles...)
 
 	switch template {
 	case "starter":
 		return append(base,
-			initFile{path: "dashboards/sales.yml", content: initSQLDashboard},
-			initFile{path: "dashboards/semantic-sales.yml", content: initSemanticDashboard},
-			initFile{path: "semantic/sales.yml", content: initSemanticModel},
+			initTextFile("dashboards/sales.yml", initSQLDashboard),
+			initTextFile("dashboards/semantic-sales.yml", initSemanticDashboard),
+			initTextFile("semantic/sales.yml", initSemanticModel),
 		), nil
 	case "sql":
 		return append(base,
-			initFile{path: "dashboards/sales.yml", content: initSQLDashboard},
+			initTextFile("dashboards/sales.yml", initSQLDashboard),
 		), nil
 	case "semantic":
 		return append(base,
-			initFile{path: "dashboards/semantic-sales.yml", content: initSemanticDashboard},
-			initFile{path: "semantic/sales.yml", content: initSemanticModel},
+			initTextFile("dashboards/semantic-sales.yml", initSemanticDashboard),
+			initTextFile("semantic/sales.yml", initSemanticModel),
 		), nil
 	case "tsx":
 		return append(base,
-			initFile{path: "dashboards/semantic-sales.dashboard.tsx", content: initSemanticTSXDashboard},
-			initFile{path: "semantic/sales.yml", content: initSemanticModel},
+			initTextFile("dashboards/semantic-sales.dashboard.tsx", initSemanticTSXDashboard),
+			initTextFile("semantic/sales.yml", initSemanticModel),
 		), nil
 	default:
 		return nil, fmt.Errorf("unknown init template %q (expected starter, sql, semantic, or tsx)", template)
 	}
+}
+
+func initTextFile(path, content string) initFile {
+	return initFile{path: path, content: []byte(content)}
+}
+
+func initSymlink(path, target string) initFile {
+	return initFile{path: path, symlinkTarget: target}
+}
+
+func initSkillFiles() ([]initFile, error) {
+	files := make([]initFile, 0, len(dacSkills)*2)
+	for _, skill := range dacSkills {
+		files = append(files, initTextFile(skill.ClaudePath, skill.Content))
+
+		target, err := filepath.Rel(
+			filepath.Dir(filepath.FromSlash(skill.CodexPath)),
+			filepath.Dir(filepath.FromSlash(skill.ClaudePath)),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("resolving Codex skill symlink for %s: %w", skill.Name, err)
+		}
+		files = append(files, initSymlink(skill.CodexPath, filepath.ToSlash(target)))
+	}
+	return files, nil
 }
 
 func shellPath(path string) string {
@@ -166,7 +216,7 @@ environments:
       duckdb:
         - name: local_duckdb
           path: data/dac-demo.duckdb
-          read_only: false
+          read_only: true
 `
 
 func initProjectReadme(template string) string {
@@ -187,6 +237,15 @@ dac serve --dir . --open
 ` + "```" + `
 
 The generated dashboards use a local DuckDB connection named ` + "`local_duckdb`" + `. The starter queries include inline sample data, so there is no seed step.
+
+## Agent Skills
+
+This project includes DAC's bundled dashboard authoring skill:
+
+- ` + "`.claude/skills/create-dashboard/SKILL.md`" + `
+- ` + "`.codex/skills/create-dashboard`" + ` symlinked to the same skill for Codex
+
+Restart your agent session to pick up newly installed skills.
 
 To inspect one generated widget from the command line:
 
@@ -212,7 +271,8 @@ const initSalesCTE = `WITH sales AS (
 var initSQLDashboard = strings.NewReplacer(
 	"__INIT_CTE_QUERY__", indentBlock(initSalesCTE, 6),
 	"__INIT_CTE_WIDGET__", indentBlock(initSalesCTE, 10),
-).Replace(`name: Sales Overview
+).Replace(`schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Sales Overview
 description: SQL-backed starter dashboard generated by dac init
 connection: local_duckdb
 
@@ -353,7 +413,8 @@ __INIT_CTE_WIDGET__
             format: currency
 `)
 
-const initSemanticModel = `name: sales
+const initSemanticModel = `schema: https://getbruin.com/schemas/dac/semantic-model/v1
+name: sales
 label: Sales
 description: Semantic model over inline sample sales data
 source:
@@ -401,7 +462,8 @@ segments:
     filter: "channel = 'online'"
 `
 
-const initSemanticDashboard = `name: Semantic Sales
+const initSemanticDashboard = `schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Semantic Sales
 description: Semantic-layer starter dashboard generated by dac init
 connection: local_duckdb
 model: sales

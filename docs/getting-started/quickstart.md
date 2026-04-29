@@ -46,13 +46,19 @@ The dashboards will be available at `http://localhost:8321`.
 dac validate --dir .
 ```
 
-## 4. Check Queries
+## 4. Agent Skills
+
+`dac init` installs DAC's local dashboard authoring skill automatically. It writes `.claude/skills/create-dashboard/SKILL.md` and links `.codex/skills/create-dashboard` to the same skill. Restart the agent session after initialization if you want Claude or Codex to pick it up.
+
+For existing projects, run `dac skills install --dir .`.
+
+## 5. Check Queries
 
 ```shell
 dac check --dir .
 ```
 
-## 5. Try Other Templates
+## 6. Try Other Templates
 
 `dac init` can also generate smaller starter projects:
 
@@ -62,7 +68,7 @@ dac init semantic-yaml --template semantic
 dac init semantic-tsx --template tsx
 ```
 
-## 6. Semantic Model Layout
+## 7. Semantic Model Layout
 
 Semantic models live in a sibling `semantic/` directory and are referenced from dashboard widgets by model name:
 

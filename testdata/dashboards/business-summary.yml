@@ -1,3 +1,4 @@
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Business Summary
 description: Simple summary of sales and orders from the local DuckDB sample database
 connection: local_duckdb

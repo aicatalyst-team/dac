@@ -1,3 +1,4 @@
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Semantic Sales Example
 description: Example dashboard using semantic models from testdata/semantic
 connection: local_duckdb

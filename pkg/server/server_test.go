@@ -142,14 +142,21 @@ func TestNew_AllowsRegularDashboardsWithInvalidSemanticModels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	regularDashboard := `name: Regular Dashboard
+	regularDashboard := `schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Regular Dashboard
 rows:
   - widgets:
       - name: Notes
         type: text
         content: Hello
 `
-	invalidModel := `name: broken_sales
+	invalidModel := `schema: https://getbruin.com/schemas/dac/semantic-model/v1
+name: broken_sales
+source:
+  table: sales
+dimensions:
+  - name: revenue
+    type: string
 metrics:
   - name: revenue
     expression: sum(amount)

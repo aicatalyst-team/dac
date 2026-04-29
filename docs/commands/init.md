@@ -38,9 +38,16 @@ The default `starter` template creates:
 ```text
 my-dashboards/
 ├── .bruin.yml
+├── .claude/
+│   └── skills/
+│       └── create-dashboard/
+│           └── SKILL.md
+├── .codex/
+│   └── skills/
+│       └── create-dashboard -> ../../.claude/skills/create-dashboard
 ├── README.md
 ├── data/
-│   └── .gitkeep
+│   └── dac-demo.duckdb
 ├── dashboards/
 │   ├── sales.yml
 │   └── semantic-sales.yml
@@ -49,6 +56,8 @@ my-dashboards/
 ```
 
 The generated dashboards use a local DuckDB connection named `local_duckdb`. Starter queries include inline sample data, so there is no separate seed step.
+
+`dac init` also installs DAC's bundled `create-dashboard` agent skill. Claude gets the real skill file under `.claude/skills/`; Codex gets a symlink under `.codex/skills/` pointing at the same content.
 
 ## Next Steps
 

@@ -9,6 +9,7 @@ It is built for analytics engineers who want dashboards to live in version contr
 - Define dashboards in YAML or TSX.
 - Reuse connections from `.bruin.yml`.
 - Validate dashboards and semantic models in CI before they break production.
+- Validate dashboard, semantic model, and theme YAML against versioned Bruin schemas.
 - Compile semantic widgets to SQL in the backend instead of inside dashboard files.
 - Serve a single embedded frontend from one DAC binary.
 
@@ -40,6 +41,15 @@ dac serve --dir . --open
 ```
 
 The starter includes a SQL-backed YAML dashboard, a semantic YAML dashboard, and a semantic model under `semantic/`.
+
+`dac init` also installs DAC's bundled dashboard authoring skill for Claude and Codex:
+
+```bash
+ls .claude/skills/create-dashboard/SKILL.md
+ls .codex/skills/create-dashboard
+```
+
+For existing projects, run `dac skills install --dir .`.
 
 If you cloned the repository, you can also run one of the bundled example projects:
 

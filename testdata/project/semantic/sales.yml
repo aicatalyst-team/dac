@@ -1,3 +1,4 @@
+schema: https://getbruin.com/schemas/dac/semantic-model/v1
 name: sales
 label: Sales
 description: Sales analytics model

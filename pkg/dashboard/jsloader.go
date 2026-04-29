@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bruin-data/dac/schemas"
 	"github.com/dop251/goja"
 	"github.com/evanw/esbuild/pkg/api"
 )
@@ -390,6 +391,7 @@ func vnodeToDashboard(root *vnode) (*Dashboard, error) {
 	}
 
 	d := &Dashboard{
+		Schema:      schemas.DashboardV1ID,
 		Name:        asString(root.Props["name"]),
 		Description: asString(root.Props["description"]),
 		Connection:  asString(root.Props["connection"]),

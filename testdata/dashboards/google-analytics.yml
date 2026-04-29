@@ -1,3 +1,4 @@
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Google Analytics
 description: Web analytics across Bruin properties
 connection: gcp-default

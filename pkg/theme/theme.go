@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/bruin-data/dac/schemas"
 	"gopkg.in/yaml.v3"
 )
 
 // Theme represents a dashboard theme with design tokens.
 type Theme struct {
+	Schema  string            `yaml:"schema,omitempty" json:"schema,omitempty"`
 	Name    string            `yaml:"name" json:"name"`
 	Extends string            `yaml:"extends,omitempty" json:"extends,omitempty"`
 	Tokens  map[string]string `yaml:"tokens" json:"tokens"`
@@ -19,6 +21,9 @@ func LoadFile(path string) (Theme, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Theme{}, fmt.Errorf("reading theme file %s: %w", path, err)
+	}
+	if err := schemas.ValidateYAML(schemas.ThemeV1ID, data); err != nil {
+		return Theme{}, fmt.Errorf("validating theme file %s: %w", path, err)
 	}
 	var t Theme
 	if err := yaml.Unmarshal(data, &t); err != nil {
@@ -32,7 +37,8 @@ func LoadFile(path string) (Theme, error) {
 
 // BruinLight is the default "bruin" theme.
 var BruinLight = Theme{
-	Name: "bruin",
+	Schema: schemas.ThemeV1ID,
+	Name:   "bruin",
 	Tokens: map[string]string{
 		"background":     "#FFFFFF",
 		"surface":        "#F6F7F9",
@@ -60,7 +66,8 @@ var BruinLight = Theme{
 
 // BruinDark is the dark variant of the "bruin" theme.
 var BruinDark = Theme{
-	Name: "bruin-dark",
+	Schema: schemas.ThemeV1ID,
+	Name:   "bruin-dark",
 	Tokens: map[string]string{
 		"background":     "#0B0E14",
 		"surface":        "#141720",

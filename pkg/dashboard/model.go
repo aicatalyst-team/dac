@@ -20,6 +20,7 @@ const (
 
 // Dashboard represents a complete dashboard definition loaded from YAML.
 type Dashboard struct {
+	Schema      string            `yaml:"schema,omitempty" json:"schema,omitempty"`
 	Name        string            `yaml:"name" json:"name"`
 	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Connection  string            `yaml:"connection,omitempty" json:"connection,omitempty"`

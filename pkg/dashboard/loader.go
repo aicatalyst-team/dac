@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/bruin-data/dac/schemas"
 )
 
 // LoadDir discovers and loads all dashboard files from the project's dashboards directory.
@@ -102,6 +104,9 @@ func loadFileWithContext(path string, paths ProjectPaths, semanticModels semanti
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading file: %w", err)
+	}
+	if err := schemas.ValidateYAML(schemas.DashboardV1ID, data); err != nil {
+		return nil, err
 	}
 
 	var d Dashboard

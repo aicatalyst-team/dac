@@ -1,0 +1,534 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getbruin.com/schemas/dac/dashboard/v1",
+  "title": "Bruin DAC Dashboard",
+  "type": "object",
+  "required": ["schema", "name", "rows"],
+  "properties": {
+    "schema": {
+      "const": "https://getbruin.com/schemas/dac/dashboard/v1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "connection": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "theme": {
+      "type": "string"
+    },
+    "refresh": {
+      "$ref": "#/$defs/refresh"
+    },
+    "filters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/filter"
+      }
+    },
+    "queries": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/query"
+      }
+    },
+    "semantic": {
+      "$ref": "#/$defs/inlineSemanticLayer"
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/row"
+      }
+    }
+  },
+  "patternProperties": {
+    "^x-": true
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "refresh": {
+      "type": "object",
+      "required": ["interval"],
+      "properties": {
+        "interval": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "filter": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": ["select", "date-range", "text"]
+        },
+        "multiple": {
+          "type": "boolean"
+        },
+        "default": true,
+        "options": {
+          "$ref": "#/$defs/filterOptions"
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "filterOptions": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "array"
+        },
+        "query": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "presets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "query": {
+      "type": "object",
+      "properties": {
+        "sql": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dimensionRef"
+          }
+        },
+        "metrics": {
+          "$ref": "#/$defs/stringList"
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/semanticFilter"
+          }
+        },
+        "segments": {
+          "$ref": "#/$defs/stringList"
+        },
+        "sort": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sort"
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "row": {
+      "type": "object",
+      "required": ["widgets"],
+      "properties": {
+        "tab": {
+          "type": "string"
+        },
+        "height": true,
+        "widgets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/widget"
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "widget": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "type": {
+          "enum": ["metric", "chart", "table", "text", "divider", "image"]
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "query": {
+          "type": "string"
+        },
+        "sql": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "metric": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "dimension": {
+          "type": "string"
+        },
+        "granularity": {
+          "type": "string"
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dimensionRef"
+          }
+        },
+        "metrics": {
+          "$ref": "#/$defs/stringList"
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/semanticFilter"
+          }
+        },
+        "segments": {
+          "$ref": "#/$defs/stringList"
+        },
+        "sort": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sort"
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chart": {
+          "enum": [
+            "line",
+            "bar",
+            "area",
+            "pie",
+            "scatter",
+            "bubble",
+            "combo",
+            "histogram",
+            "boxplot",
+            "funnel",
+            "sankey",
+            "heatmap",
+            "calendar",
+            "sparkline",
+            "waterfall",
+            "xmr",
+            "dumbbell"
+          ]
+        },
+        "x": {
+          "type": "string"
+        },
+        "y": {
+          "$ref": "#/$defs/stringList"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "stacked": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "bins": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lines": {
+          "$ref": "#/$defs/stringList"
+        },
+        "yMin": {
+          "type": "string"
+        },
+        "yMax": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tableColumn"
+          }
+        },
+        "content": {
+          "type": "string"
+        },
+        "src": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "dimensionRef": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "granularity": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "semanticFilter": {
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "operator": {
+          "enum": ["equals", "not_equals", "gt", "gte", "lt", "lte", "in", "not_in", "between", "is_null", "is_not_null"]
+        },
+        "value": true,
+        "expression": {
+          "type": "string"
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["dimension", "operator"]
+        },
+        {
+          "required": ["expression"]
+        }
+      ],
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "sort": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direction": {
+          "enum": ["asc", "desc"]
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "tableColumn": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "inlineSemanticLayer": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/inlineSource"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/inlineMetric"
+          }
+        },
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/inlineDimension"
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "inlineSource": {
+      "type": "object",
+      "required": ["table"],
+      "properties": {
+        "table": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date_column": {
+          "type": "string"
+        },
+        "date_format": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "inlineMetric": {
+      "type": "object",
+      "properties": {
+        "aggregate": {
+          "enum": ["count", "count_distinct", "sum", "avg", "min", "max"]
+        },
+        "column": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "expression": {
+          "type": "string"
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "inlineDimension": {
+      "type": "object",
+      "required": ["column"],
+      "properties": {
+        "column": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": ["date"]
+        }
+      },
+      "patternProperties": {
+        "^x-": true
+      },
+      "additionalProperties": false
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

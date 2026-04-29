@@ -1,3 +1,4 @@
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Sales Analytics
 description: Real-time sales performance and revenue tracking
 connection: local_duckdb

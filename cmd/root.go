@@ -45,6 +45,7 @@ func NewApp(build BuildInfo) *cli.Command {
 			queryCmd(),
 			lsCmd(),
 			connectionsCmd(),
+			skillsCmd(),
 			exportCmd(),
 			versionCmd(build),
 		},

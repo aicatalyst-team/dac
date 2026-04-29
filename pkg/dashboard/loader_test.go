@@ -65,6 +65,23 @@ func TestLoadFile_NonexistentFile(t *testing.T) {
 	assertErr(t, err)
 }
 
+func TestLoadFile_RejectsDashboardWithoutSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dashboard.yml")
+	assertNoErr(t, os.WriteFile(path, []byte(`name: Missing Schema
+rows:
+  - widgets:
+      - name: Notes
+        type: text
+        content: Hello
+`), 0o644))
+
+	_, err := LoadFile(path)
+	assertErr(t, err)
+	if !strings.Contains(err.Error(), "schema validation failed") {
+		t.Fatalf("expected schema validation error, got %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Auto-set tests for declarative widgets
 // ---------------------------------------------------------------------------
@@ -182,7 +199,8 @@ func TestLoadDir_InvalidSemanticModelsDoNotBlockRegularDashboards(t *testing.T) 
 	assertNoErr(t, os.MkdirAll(dashboardsDir, 0o755))
 	assertNoErr(t, os.MkdirAll(semanticDir, 0o755))
 
-	regularDashboard := `name: Regular Dashboard
+	regularDashboard := `schema: https://getbruin.com/schemas/dac/dashboard/v1
+name: Regular Dashboard
 rows:
   - widgets:
       - name: Notes
@@ -191,10 +209,16 @@ rows:
 `
 	assertNoErr(t, os.WriteFile(filepath.Join(dashboardsDir, "regular.yml"), []byte(regularDashboard), 0o644))
 
-	invalidModel := `name: broken_sales
+	invalidModel := `schema: https://getbruin.com/schemas/dac/semantic-model/v1
+name: broken_sales
+source:
+  table: sales
 dimensions:
   - name: region
     type: string
+metrics:
+  - name: region
+    expression: count(*)
 `
 	assertNoErr(t, os.WriteFile(filepath.Join(semanticDir, "broken-sales.yml"), []byte(invalidModel), 0o644))
 

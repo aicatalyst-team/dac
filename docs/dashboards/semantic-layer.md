@@ -37,6 +37,7 @@ Run the bundled examples from the repository root:
 Example `semantic/sales.yml`:
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/semantic-model/v1
 name: sales
 label: Sales
 description: Semantic model over the sales table
@@ -81,6 +82,7 @@ segments:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `schema` | string | Yes | `https://getbruin.com/schemas/dac/semantic-model/v1` |
 | `name` | string | Yes | Model name used by dashboards |
 | `label` | string | No | Display label |
 | `description` | string | No | Model description |
@@ -106,7 +108,11 @@ Dimensions are fields that dashboards can group by, filter by, or sort by.
 
 ### Metrics
 
-Metrics are aggregate expressions. They can reference other metrics with `{metric_name}`.
+Metrics are aggregate expressions. They come in three flavors:
+
+- **Base** — raw SQL with aggregation (e.g. `sum(amount)`).
+- **Derived** — references other metrics with `{metric_name}` (e.g. `{revenue} / {sales_count}`).
+- **Window** — references exactly one metric and applies a window function via the `window` block.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -117,13 +123,20 @@ Metrics are aggregate expressions. They can reference other metrics with `{metri
 | `format.currency` | string | Currency code for currency values |
 | `format.decimals` | integer | Decimal precision |
 | `window.type` | string | `running_total`, `lag`, `lead`, `rank`, or `percent_of_total` |
-| `window.order_by` | string | Window ordering expression |
-| `window.partition_by` | string[] | Window partitions |
+| `window.order_by` | string | Dimension to order the window by |
+| `window.partition_by` | string[] | Dimensions to partition the window by |
 | `window.offset` | integer | Offset for `lag` or `lead` |
 | `label` | string | Optional display label |
 | `description` | string | Optional description |
 | `hidden` | bool | Hide from UI consumers |
 | `group` | string | Optional grouping label |
+
+#### Expression Rules
+
+- A metric expression may mix `{ref}` placeholders with raw aggregation, e.g. `sum(amount) / {order_count}`. Naming the aggregation as its own base metric (`revenue: sum(amount)`) is usually clearer, but not required.
+- A window metric's `expression` must be exactly a single `{ref}` (e.g. `"{revenue}"`). Apply any further arithmetic in a separate derived metric that references the window metric.
+- A window metric cannot transitively depend on a metric that mixes `{refs}` with raw aggregation. The wrapped-query rewrite cannot lift unnamed aggregations into the inner subquery, so any aggregation reachable from a window metric must be a named base metric. Split the offending metric into a base + derived pair.
+- For `running_total`, `lag`, `lead`, and `rank`, `window.order_by` is required. Both `window.order_by` and every entry in `window.partition_by` must reference dimensions defined on the same model.
 
 ### Segments
 
@@ -141,6 +154,7 @@ Segments are named SQL predicates reused by dashboards.
 Set a default model for the whole dashboard:
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Semantic Sales Example
 connection: local_duckdb
 model: sales
@@ -151,6 +165,7 @@ Widgets and named queries then inherit `sales` unless they set their own `model`
 You can also define aliases with `models`. This is useful when a dashboard references multiple models or when you want stable dashboard-facing names:
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Executive Sales
 connection: warehouse
 model: sales_model

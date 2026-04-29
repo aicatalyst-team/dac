@@ -22,7 +22,8 @@ func TestInitCommand_CreatesStarterProject(t *testing.T) {
 	for _, path := range []string{
 		".bruin.yml",
 		"README.md",
-		"data/.gitkeep",
+		"data/dac-demo.duckdb",
+		".claude/skills/create-dashboard/SKILL.md",
 		"dashboards/sales.yml",
 		"dashboards/semantic-sales.yml",
 		"semantic/sales.yml",
@@ -31,6 +32,14 @@ func TestInitCommand_CreatesStarterProject(t *testing.T) {
 			t.Fatalf("expected %s to exist: %v", path, err)
 		}
 	}
+	config, err := os.ReadFile(filepath.Join(dir, ".bruin.yml"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(config), "read_only: true") {
+		t.Fatalf("expected DuckDB connection to be read-only, got %s", config)
+	}
+	assertCodexSkillSymlink(t, dir)
 
 	dashboards, err := dashboard.LoadDir(dir)
 	if err != nil {
@@ -66,6 +75,10 @@ func TestInitCommand_SQLTemplateSkipsSemanticFiles(t *testing.T) {
 	if strings.Contains(string(readme), "Semantic Sales") {
 		t.Fatalf("sql template README should not reference semantic dashboard: %s", readme)
 	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "create-dashboard", "SKILL.md")); err != nil {
+		t.Fatalf("expected SQL template to install agent skill: %v", err)
+	}
+	assertCodexSkillSymlink(t, dir)
 }
 
 func TestInitCommand_TemplatesAliases(t *testing.T) {
@@ -118,6 +131,35 @@ func TestInitCommand_ForceOverwritesScaffoldFiles(t *testing.T) {
 	}
 }
 
+func TestInitCommand_RefusesSkillOverwriteWithoutForce(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".codex", "skills", "create-dashboard")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	err := runInit(dir, "starter", false)
+	if err == nil {
+		t.Fatal("expected overwrite conflict")
+	}
+	if !strings.Contains(err.Error(), ".codex/skills/create-dashboard") {
+		t.Fatalf("expected Codex skill conflict, got %v", err)
+	}
+}
+
+func TestInitCommand_ForceReplacesCodexSkillDirectoryWithSymlink(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".codex", "skills", "create-dashboard")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	if err := runInit(dir, "starter", true); err != nil {
+		t.Fatalf("init --force failed: %v", err)
+	}
+	assertCodexSkillSymlink(t, dir)
+}
+
 func TestInitCommand_RegisteredWithApp(t *testing.T) {
 	app := NewApp(BuildInfo{Version: "test"})
 	var found bool
@@ -141,5 +183,29 @@ func TestInitCommand_RunsThroughCLI(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "dashboards/semantic-sales.yml")); err != nil {
 		t.Fatalf("expected semantic dashboard: %v", err)
+	}
+	assertCodexSkillSymlink(t, dir)
+}
+
+func assertCodexSkillSymlink(t *testing.T, dir string) {
+	t.Helper()
+
+	codexPath := filepath.Join(dir, ".codex", "skills", "create-dashboard")
+	info, err := os.Lstat(codexPath)
+	if err != nil {
+		t.Fatalf("expected Codex skill symlink: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected Codex skill path to be a symlink, got mode %s", info.Mode())
+	}
+	target, err := os.Readlink(codexPath)
+	if err != nil {
+		t.Fatalf("read Codex symlink: %v", err)
+	}
+	if target != filepath.Join("..", "..", ".claude", "skills", "create-dashboard") {
+		t.Fatalf("unexpected Codex symlink target %q", target)
+	}
+	if _, err := os.Stat(filepath.Join(codexPath, "SKILL.md")); err != nil {
+		t.Fatalf("expected Codex skill symlink to expose SKILL.md: %v", err)
 	}
 }

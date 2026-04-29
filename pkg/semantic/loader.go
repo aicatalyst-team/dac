@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bruin-data/dac/schemas"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,6 +15,9 @@ func parseFile(path string) (*Model, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading semantic model: %w", err)
+	}
+	if err := schemas.ValidateYAML(schemas.SemanticModelV1ID, data); err != nil {
+		return nil, err
 	}
 
 	var model Model

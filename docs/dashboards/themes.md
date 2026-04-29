@@ -12,6 +12,7 @@ DAC includes a theme system based on design tokens. Choose a built-in theme or d
 Set the theme in your dashboard:
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: My Dashboard
 theme: bruin-dark
 ```
@@ -29,6 +30,7 @@ The `--template` flag overrides the theme for all dashboards.
 Create a YAML file with your theme tokens:
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/theme/v1
 name: corporate
 extends: bruin
 
@@ -50,6 +52,7 @@ dac serve --template ./themes/corporate.yml
 Or reference it in your dashboard:
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: My Dashboard
 theme: ./themes/corporate.yml
 ```

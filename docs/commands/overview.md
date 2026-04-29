@@ -24,4 +24,5 @@ These flags apply to all commands:
 | [`ls`](/commands/ls) | List discovered dashboards |
 | [`query`](/commands/query) | Run SQL against a connection |
 | [`connections`](/commands/connections) | Test database connections |
+| [`skills`](/commands/skills) | List and install DAC agent skills |
 | [`export`](/commands/export) | Export dashboards to external formats |

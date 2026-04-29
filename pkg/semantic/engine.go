@@ -8,9 +8,18 @@ import (
 
 var refPattern = regexp.MustCompile(`\{([^}]+)\}`)
 
+var aggregateFuncPattern = regexp.MustCompile(`(?i)\b(sum|count|avg|min|max|stddev|stddev_samp|stddev_pop|variance|var_samp|var_pop|median|percentile_cont|percentile_disc|array_agg|string_agg|listagg|approx_count_distinct|approx_quantile)\s*\(`)
+
 func maskTemplateDelimiters(expr string) string {
 	replacer := strings.NewReplacer("{{", "@@", "}}", "##")
 	return replacer.Replace(expr)
+}
+
+// containsAggregateOutsideRefs reports whether expr contains an aggregate
+// function call that is not inside a {ref} placeholder.
+func containsAggregateOutsideRefs(expr string) bool {
+	stripped := refPattern.ReplaceAllString(maskTemplateDelimiters(expr), "")
+	return aggregateFuncPattern.MatchString(stripped)
 }
 
 // Engine generates SQL from a Model and a Query.
@@ -95,6 +104,90 @@ func (e *Engine) validate() error {
 				return fmt.Errorf("metric %q: %w", m.Name, err)
 			}
 		}
+	}
+
+	for i := range e.model.Metrics {
+		m := &e.model.Metrics[i]
+		if isWindow(m) {
+			if err := e.validateWindowMetric(m); err != nil {
+				return err
+			}
+			if dep, ok := e.findMixedAggregationDep(m.Name); ok {
+				return fmt.Errorf("window metric %q depends on metric %q which mixes {refs} with raw aggregation; split %q into a named base metric and a derived metric", m.Name, dep, dep)
+			}
+		}
+	}
+	return nil
+}
+
+// isMixedExpression reports whether a metric expression contains both {refs}
+// and a raw aggregation function call. Such metrics work in simple queries but
+// cannot be hoisted into the inner subquery of a window-wrapped query.
+func isMixedExpression(m *Metric) bool {
+	return isDerived(m) && containsAggregateOutsideRefs(m.Expression)
+}
+
+// findMixedAggregationDep walks the {ref} chain of a window metric and returns
+// the name of the first transitive dependency that mixes {refs} with raw
+// aggregation. The window metric itself is exempt — its expression must be a
+// single {ref} (validated separately).
+func (e *Engine) findMixedAggregationDep(rootName string) (string, bool) {
+	visited := map[string]bool{}
+	var walk func(string) (string, bool)
+	walk = func(name string) (string, bool) {
+		if visited[name] {
+			return "", false
+		}
+		visited[name] = true
+		m := e.metrics[name]
+		if m == nil {
+			return "", false
+		}
+		if name != rootName && isMixedExpression(m) {
+			return name, true
+		}
+		for _, ref := range extractRefs(m.Expression) {
+			if dep, ok := walk(ref); ok {
+				return dep, true
+			}
+		}
+		return "", false
+	}
+	return walk(rootName)
+}
+
+func (e *Engine) validateWindowMetric(m *Metric) error {
+	refs := extractRefs(m.Expression)
+	if len(refs) != 1 || strings.TrimSpace(m.Expression) != "{"+refs[0]+"}" {
+		return fmt.Errorf("window metric %q: expression must be exactly a single {ref}, got %q", m.Name, m.Expression)
+	}
+	if e.metrics[refs[0]] == nil {
+		return fmt.Errorf("window metric %q: references unknown metric {%s}", m.Name, refs[0])
+	}
+
+	switch m.Window.Type {
+	case "running_total", "lag", "lead", "rank":
+		if m.Window.OrderBy == "" {
+			return fmt.Errorf("window metric %q: window.order_by is required for type %q", m.Name, m.Window.Type)
+		}
+		if e.dims[m.Window.OrderBy] == nil {
+			return fmt.Errorf("window metric %q: window.order_by references unknown dimension %q", m.Name, m.Window.OrderBy)
+		}
+		for _, p := range m.Window.PartitionBy {
+			if e.dims[p] == nil {
+				return fmt.Errorf("window metric %q: window.partition_by references unknown dimension %q", m.Name, p)
+			}
+		}
+	case "percent_of_total":
+		for _, p := range m.Window.PartitionBy {
+			if e.dims[p] == nil {
+				return fmt.Errorf("window metric %q: window.partition_by references unknown dimension %q", m.Name, p)
+			}
+		}
+	case "":
+		return fmt.Errorf("window metric %q: window.type is required", m.Name)
+	default:
+		return fmt.Errorf("window metric %q: unknown window.type %q", m.Name, m.Window.Type)
 	}
 	return nil
 }
@@ -490,7 +583,7 @@ func (e *Engine) buildWhereHaving(q *Query) (where, having string, err error) {
 		if f.Expression != "" {
 			raw = f.Expression
 		} else {
-			raw = filterToSQL(f)
+			raw = e.filterToSQL(f)
 		}
 		expanded, needsHaving, err := e.expandFilterExpr(raw)
 		if err != nil {
@@ -520,8 +613,9 @@ func (e *Engine) buildWhereHaving(q *Query) (where, having string, err error) {
 
 func (e *Engine) expandFilterExpr(expr string) (string, bool, error) {
 	masked := maskTemplateDelimiters(expr)
+	hasAggregate := containsAggregateOutsideRefs(expr)
 	if !refPattern.MatchString(masked) {
-		return expr, false, nil
+		return expr, hasAggregate, nil
 	}
 
 	hasMetricRef := false
@@ -549,7 +643,7 @@ func (e *Engine) expandFilterExpr(expr string) (string, bool, error) {
 	})
 
 	result = strings.NewReplacer("@@", "{{", "##", "}}").Replace(result)
-	return result, hasMetricRef, expandErr
+	return result, hasMetricRef || hasAggregate, expandErr
 }
 
 func (e *Engine) buildOrderAndLimit(q *Query) string {
@@ -571,11 +665,14 @@ func (e *Engine) buildOrderAndLimit(q *Query) string {
 	return s
 }
 
-func filterToSQL(f Filter) string {
+func (e *Engine) filterToSQL(f Filter) string {
 	if f.Expression != "" {
 		return f.Expression
 	}
 	dim := f.Dimension
+	if d := e.dims[f.Dimension]; d != nil {
+		dim = e.dimExpr(d, "")
+	}
 	switch f.Operator {
 	case "equals":
 		return fmt.Sprintf("%s = %s", dim, formatValue(f.Value))
@@ -632,13 +729,18 @@ func betweenValues(v interface{}) (interface{}, interface{}, bool) {
 func formatValue(v interface{}) string {
 	switch val := v.(type) {
 	case string:
-		return "'" + val + "'"
+		return "'" + strings.ReplaceAll(val, "'", "''") + "'"
 	case int:
 		return fmt.Sprintf("%d", val)
 	case int64:
 		return fmt.Sprintf("%d", val)
 	case float64:
 		return fmt.Sprintf("%g", val)
+	case bool:
+		if val {
+			return "TRUE"
+		}
+		return "FALSE"
 	default:
 		return fmt.Sprintf("%v", val)
 	}
@@ -649,7 +751,7 @@ func formatList(v interface{}) string {
 	case []string:
 		quoted := make([]string, len(val))
 		for i, s := range val {
-			quoted[i] = "'" + s + "'"
+			quoted[i] = "'" + strings.ReplaceAll(s, "'", "''") + "'"
 		}
 		return strings.Join(quoted, ", ")
 	case []interface{}:
@@ -724,13 +826,27 @@ func (e *Engine) collectBaseMetrics(metricNames []string) []string {
 
 func containsOperator(s string) bool {
 	depth := 0
+	inSingle := false
+	inDouble := false
 	for i := 0; i < len(s); i++ {
-		switch s[i] {
+		c := s[i]
+		switch {
+		case c == '\'' && !inDouble:
+			inSingle = !inSingle
+			continue
+		case c == '"' && !inSingle:
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle || inDouble {
+			continue
+		}
+		switch c {
 		case '(':
 			depth++
 		case ')':
 			depth--
-		case '+', '-':
+		case '+', '-', '*', '/', '=', '<', '>', '!':
 			if depth == 0 && i > 0 {
 				return true
 			}

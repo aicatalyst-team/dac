@@ -9,6 +9,7 @@ Place dashboard YAML files in the project's `dashboards/` directory. Any `.yml` 
 ## Top-Level Schema
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1  # required
 name: Sales Analytics              # required
 description: Revenue tracking      # optional
 connection: local_duckdb           # optional default connection
@@ -40,6 +41,7 @@ rows:
 ## Minimal Example
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Hello World
 connection: my_db
 
@@ -56,6 +58,7 @@ rows:
 Semantic models are defined separately in `semantic/*.yml`. Dashboards reference them by model name:
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Semantic Sales Example
 connection: local_duckdb
 model: sales
@@ -128,6 +131,7 @@ For a complete runnable project, see `examples/semantic-yaml`.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `schema` | string | Yes | `https://getbruin.com/schemas/dac/dashboard/v1` |
 | `name` | string | Yes | Dashboard display name |
 | `description` | string | No | Optional subtitle |
 | `connection` | string | No | Default connection for widgets and named queries |

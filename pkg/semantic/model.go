@@ -2,6 +2,7 @@ package semantic
 
 // Model describes a single semantic model with dimensions, metrics, and segments.
 type Model struct {
+	Schema      string      `yaml:"schema,omitempty" json:"schema,omitempty"`
 	Name        string      `yaml:"name" json:"name"`
 	Label       string      `yaml:"label,omitempty" json:"label,omitempty"`
 	Description string      `yaml:"description,omitempty" json:"description,omitempty"`

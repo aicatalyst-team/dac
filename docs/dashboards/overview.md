@@ -25,6 +25,7 @@ DAC supports two dashboard formats:
 Best for declarative dashboards with static structure.
 
 ```yaml
+schema: https://getbruin.com/schemas/dac/dashboard/v1
 name: Sales Overview
 connection: my_db
 
@@ -79,6 +80,7 @@ See [TSX Format](/dashboards/tsx).
 | [Queries](/dashboards/queries) | Named SQL or semantic queries reusable across widgets |
 | [Semantic Layer](/dashboards/semantic-layer) | External semantic models loaded from `semantic/` |
 | [Themes](/dashboards/themes) | Visual customization via design tokens |
+| [Schemas](/dashboards/schemas) | Versioned YAML contracts for dashboards, semantic models, and themes |
 
 ## File Discovery
 

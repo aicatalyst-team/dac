@@ -42,11 +42,11 @@ test: test-unit
 
 test-unit:
 	@echo "$(OK_COLOR)==> Running the unit tests$(NO_COLOR)"
-	@go test -race -cover -timeout 5m ./cmd/... ./pkg/...
+	@go test -race -cover -timeout 5m ./cmd/... ./pkg/... ./schemas/...
 
 format:
 	@echo "$(OK_COLOR)>> [go vet] running$(NO_COLOR)"
-	@go vet ./cmd/... ./pkg/...
+	@go vet ./cmd/... ./pkg/... ./schemas/...
 
 # Run both frontend and backend with live reload
 dev:
