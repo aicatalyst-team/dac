@@ -19,7 +19,7 @@ It is built for AI agents to build dashboards in a reliable and reviewable way.
 <tr>
 <td>
 
-<pre><code class="language-tsx">export default (
+<pre lang="tsx"><code>export default (
   &lt;Dashboard name="Simple Dashboard" connection="my_db"&gt;
     &lt;Row&gt;
       &lt;Metric
@@ -37,7 +37,7 @@ It is built for AI agents to build dashboards in a reliable and reviewable way.
 </td>
 <td>
 
-<pre><code class="language-yaml">name: Sales Overview
+<pre lang="yaml"><code>name: Sales Overview
 connection: warehouse
 
 rows:
