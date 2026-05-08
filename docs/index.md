@@ -1,5 +1,7 @@
 # Overview
 
+![DAC](/dac.gif)
+
 DAC (**D**ashboard-**a**s-**C**ode) is a tool for defining, validating, and serving data dashboards from version-controlled source files. 
 - Build dashboards in YAML or TSX, executed against your existing [Bruin](https://github.com/bruin-data/bruin) connections, and rendered through an embedded React frontend that ships in a single Go binary
 - Supports 17+ chart types, interactive filters, a semantic layer for reusable metrics, and validation tools to catch errors before they reach **production**
