@@ -32,7 +32,10 @@ func checkCmd() *cli.Command {
 		Usage: "Validate dashboards and execute all queries to verify they work",
 		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			dir := cmd.String("dir")
+			dir, err := dashboardDirFromCommand(cmd)
+			if err != nil {
+				return err
+			}
 
 			configFile, _, err := resolveConfig(cmd, dir)
 			if err != nil {

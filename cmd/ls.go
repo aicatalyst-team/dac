@@ -17,7 +17,11 @@ func lsCmd() *cli.Command {
 		Usage: "List discovered dashboards",
 		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			dashboards, err := loadValidatedDashboards(cmd.String("dir"))
+			dir, err := dashboardDirFromCommand(cmd)
+			if err != nil {
+				return err
+			}
+			dashboards, err := loadValidatedDashboards(dir)
 			if err != nil {
 				return err
 			}
@@ -27,7 +31,7 @@ func lsCmd() *cli.Command {
 				"invalid_count": 0,
 			})
 			if dashboards == nil {
-				fmt.Println("No dashboard files found in", cmd.String("dir"))
+				fmt.Println("No dashboard files found in", dir)
 				return nil
 			}
 

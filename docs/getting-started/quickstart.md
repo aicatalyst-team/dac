@@ -30,6 +30,12 @@ dac validate --dir .
 
 Validation checks dashboard YAML, semantic model YAML, schema versions, semantic references, and dashboard structure before anything is served. When `schema` is omitted, DAC assumes v1.
 
+To also validate the generated SQL against your local DuckDB connection without fetching rows:
+
+```shell
+dac validate --dir . --with-database
+```
+
 ## 3. Inspect a Widget Query
 
 ```shell

@@ -16,7 +16,10 @@ func connectionsCmd() *cli.Command {
 		Usage: "Test database connections from .bruin.yml",
 		Flags: []cli.Flag{dirFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			dir := cmd.String("dir")
+			dir, err := dashboardDirFromCommand(cmd)
+			if err != nil {
+				return err
+			}
 
 			configFile, cfg, err := resolveConfig(cmd, dir)
 			if err != nil {

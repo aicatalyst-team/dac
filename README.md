@@ -80,6 +80,7 @@ Create a new starter project:
 dac init my-dashboards
 cd my-dashboards
 dac validate --dir .
+dac validate --dir . --with-database
 dac serve --dir . --open
 ```
 

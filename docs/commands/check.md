@@ -1,6 +1,6 @@
 # dac check
 
-Validate dashboards **and** execute all widget queries. This is a deeper check than `validate` because it verifies that SQL-backed and semantic widgets actually run against your database.
+Validate dashboards **and** execute all widget queries. This is deeper than `dac validate --with-database` because it fetches real results instead of only dry-running or explaining SQL.
 
 ```shell
 dac check [flags]
@@ -39,6 +39,12 @@ Sales Analytics
 - **Error messages** for failed queries
 
 For semantic widgets, `dac check` resolves the referenced model from `semantic/`, compiles the widget definition to SQL, and executes that generated SQL.
+
+If you only need database-side compilation without fetching rows, use:
+
+```shell
+dac validate --with-database
+```
 
 ## Use Cases
 

@@ -59,8 +59,8 @@ func newBackend(cmd *cli.Command, configFile string) *query.BruinCLIBackend {
 }
 
 // loadDashboards loads dashboards from a directory, returning a user-friendly error if empty.
-func loadDashboards(dir string) ([]*dashboard.Dashboard, error) {
-	dashboards, err := dashboard.LoadDir(dir)
+func loadDashboards(dir string, opts ...dashboard.TSXOption) ([]*dashboard.Dashboard, error) {
+	dashboards, err := dashboard.LoadDir(dir, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load dashboards: %w", err)
 	}
@@ -68,6 +68,19 @@ func loadDashboards(dir string) ([]*dashboard.Dashboard, error) {
 		return nil, nil
 	}
 	return dashboards, nil
+}
+
+func dashboardDirFromCommand(cmd *cli.Command) (string, error) {
+	if cmd.Args().Len() == 0 {
+		return cmd.String("dir"), nil
+	}
+	if cmd.Args().Len() > 1 {
+		return "", fmt.Errorf("expected at most one dashboard directory argument")
+	}
+	if dir := cmd.String("dir"); dir != "." {
+		return "", fmt.Errorf("pass the dashboard directory either as an argument or with --dir, not both")
+	}
+	return cmd.Args().First(), nil
 }
 
 func loadValidatedDashboards(dir string) ([]*dashboard.Dashboard, error) {
