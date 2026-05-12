@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dac
+  namespace: dac
+  labels:
+    app.kubernetes.io/name: dac
+    app.kubernetes.io/component: dac
+    app.kubernetes.io/managed-by: autopoc
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dac
+    app.kubernetes.io/component: dac
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

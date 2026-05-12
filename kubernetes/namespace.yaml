@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dac
+  labels:
+    app.kubernetes.io/name: dac
+    app.kubernetes.io/managed-by: autopoc
