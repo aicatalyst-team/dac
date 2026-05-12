@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: dac
-        app.kubernetes.io/component: dac-validate-dashboards
+        app.kubernetes.io/component: dac
     spec:
       containers:
         - name: dac
