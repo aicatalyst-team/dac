@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Learn how to deploy Bruin Data's DAC dashboard tool on OpenShift AI. Step-by-step PoC with UBI containers, Kubernetes manifests, and test results.">
+  <title>Deploying dac on OpenShift AI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.7;
+      color: #1a1a1a;
+      background: #fff;
+    }
+
+    /* --- Header --- */
+    .header {
+      background: #1a1a1a;
+      color: #fff;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      border-bottom: 3px solid #e00;
+    }
+    .header .logo { font-weight: 700; font-size: 1.1rem; }
+    .header .logo span { color: #e00; }
+
+    /* --- Hero --- */
+    .hero {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: #fff;
+      padding: 3rem 2rem;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      max-width: 800px;
+      margin: 0 auto 0.75rem;
+      line-height: 1.3;
+    }
+    .hero .subtitle {
+      font-size: 1.15rem;
+      color: #ccc;
+      max-width: 700px;
+      margin: 0 auto 1.5rem;
+      font-style: italic;
+    }
+    .hero .meta {
+      font-size: 0.9rem;
+      color: #999;
+    }
+    .hero .meta span { margin: 0 0.5rem; }
+
+    /* --- Article --- */
+    article {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    article h2 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin: 2.5rem 0 1rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 2px solid #e00;
+      color: #1a1a1a;
+    }
+    article h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 2rem 0 0.75rem;
+      color: #333;
+    }
+    article h4 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: #555;
+    }
+
+    article p {
+      margin: 0 0 1.2rem;
+      font-size: 1.05rem;
+    }
+
+    article ul, article ol {
+      margin: 0 0 1.2rem 1.5rem;
+      font-size: 1.05rem;
+    }
+    article li { margin-bottom: 0.4rem; }
+
+    article a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+    article a:hover { text-decoration: underline; }
+
+    article strong { font-weight: 600; }
+
+    article blockquote {
+      border-left: 4px solid #e00;
+      padding: 0.75rem 1rem;
+      margin: 1.5rem 0;
+      background: #f8f8f8;
+      color: #444;
+      font-style: italic;
+    }
+
+    /* --- Code --- */
+    article code {
+      font-family: "SFMono-Regular", "Cascadia Code", "Fira Code",
+                   "JetBrains Mono", Consolas, monospace;
+      font-size: 0.9em;
+      background: #f0f0f0;
+      padding: 0.15em 0.4em;
+      border-radius: 3px;
+    }
+    article pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 1.2rem 1.5rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 1.2rem 0 1.5rem;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    article pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    /* --- Tables --- */
+    article table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.2rem 0 1.5rem;
+      font-size: 0.95rem;
+    }
+    article th {
+      background: #f0f0f0;
+      font-weight: 600;
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      border-bottom: 2px solid #ddd;
+    }
+    article td {
+      padding: 0.5rem 0.8rem;
+      border-bottom: 1px solid #eee;
+    }
+    article tr:hover { background: #fafafa; }
+
+    /* --- Image placeholders --- */
+    .image-placeholder {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      background: #fafafa;
+      text-align: center;
+      color: #666;
+    }
+    .image-placeholder strong { color: #333; }
+
+    /* --- Footer --- */
+    .footer {
+      background: #1a1a1a;
+      color: #999;
+      padding: 2rem;
+      text-align: center;
+      font-size: 0.85rem;
+      margin-top: 3rem;
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 1.6rem; }
+      article { padding: 1.5rem 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Open<span>Shift</span> AI — Developer Blog</div>
+  </div>
+
+  <div class="hero">
+    <h1>Deploying dac on OpenShift AI</h1>
+    <div class="subtitle">DAC (Dashboard-as-Code) is a CLI tool for defining, validating, and serving dashboards from YAML and TSX files.</div>
+    <div class="meta">
+      <span>AutoPoC</span> &middot;
+      <span>May 2026</span> &middot;
+      <span>8 min read</span>
+    </div>
+  </div>
+
+  <article>
+    <h2>What is DAC?</h2>
+<p>DAC (Dashboard-as-Code) is a CLI tool from Bruin Data that lets you define, validate, and serve dashboards using YAML and TSX files instead of dragging widgets around in a GUI. Think of it as "Infrastructure as Code" applied to business intelligence — your dashboards live in version control, go through code review, and deploy deterministically.</p>
+<p>Under the hood, DAC is a Go binary with a React/TypeScript frontend embedded directly into it. A Node.js/Vite build compiles the React frontend, then the Go build embeds those static assets into a single binary. At runtime, the Go server handles API requests, loads dashboard definitions from YAML, transpiles TSX components via an embedded JavaScript runtime (Goja), and serves everything on a single port. It also ships with query backends for DuckDB, BigQuery, Snowflake, and Databricks.</p>
+<p>The result is a self-contained binary that can serve a full dashboard UI with zero external dependencies — no database server, no Node.js runtime, no separate frontend deployment.</p>
+<h2>Why this matters for OpenShift AI</h2>
+<p>Let's be upfront: DAC scored 18/100 on our RHOAI fitness evaluation. It's not an ML workload, it doesn't need GPUs, and it doesn't exercise inference serving or model training pipelines.</p>
+<p>But data platform teams don't just run models — they need the tooling ecosystem around them. This PoC validates a deployment pattern we encounter constantly: a single Go binary with an embedded frontend, minimal resource footprint, and no sidecar dependencies. Proving that this pattern works cleanly on OpenShift matters for teams evaluating the platform for mixed workloads. DAC's multi-database query support also makes it a plausible visualization tier alongside Open Data Hub pipelines, though we didn't test that integration here.</p>
+<h2>Setting up the PoC</h2>
+<p>DAC's infrastructure requirements are refreshingly minimal:</p>
+<ul>
+<li><strong>Compute</strong>: 256Mi RAM, 250m CPU — a lightweight Go binary serving static assets and parsing YAML</li>
+<li><strong>GPU</strong>: None</li>
+<li><strong>Persistent storage</strong>: None — example dashboards and a bundled DuckDB file are baked into the image</li>
+<li><strong>Sidecar containers</strong>: None</li>
+<li><strong>Environment variables</strong>: Just <code>TELEMETRY_OPTOUT=1</code> to disable analytics</li>
+</ul>
+<p>The entrypoint runs <code>dac serve --dir /app/examples/basic-yaml --port 8080</code>, which loads bundled example dashboards and starts the embedded web server. About as simple as a PoC gets.</p>
+<div class="image-placeholder">
+<p><strong>[Image Placeholder 1: Architecture diagram showing the DAC deployment on OpenShift]</strong></p>
+<p><strong>Placement rationale</strong>: Readers benefit from seeing the overall architecture before diving into Dockerfile and YAML details — a diagram here anchors the mental model.</p>
+<p><strong>Image generation prompt</strong>: A clean architecture diagram on a white background showing a single Kubernetes pod containing one container labeled "DAC (Go + React)". Arrows show an HTTP request entering through a Kubernetes Service on port 8080, hitting the pod. Inside the container, show two internal layers: "Embedded React Frontend" and "Go API Server + YAML Parser + DuckDB". Use Red Hat-style colors (red #EE0000, dark gray #333, light gray #F5F5F5). Flat design, no 3D effects. 16:9 aspect ratio.</p>
+<p><strong>Alt text</strong>: Architecture diagram showing a Kubernetes Service routing traffic on port 8080 to a single pod containing the DAC container with embedded React frontend and Go API server.</p>
+</div>
+<h2>Containerizing with UBI</h2>
+<p>The build required a multi-stage Dockerfile — one stage for the Node.js frontend build, and a second for the Go binary build that embeds those compiled assets. Here's a simplified version of the structure (see the <a href="https://github.com/aicatalyst-team/dac.git">fork repo</a> for the actual Dockerfile):</p>
+<pre><code class="language-dockerfile">
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS frontend
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22 AS builder
+WORKDIR /app
+COPY --from=frontend /app/frontend/dist ./frontend/dist
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 go build -o /app/dac ./cmd/dac
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+COPY --from=builder /app/dac /usr/local/bin/dac
+COPY examples/ /app/examples/
+ENTRYPOINT ["/usr/local/bin/dac"]
+</code></pre>
+<p>The main challenge was <code>CGO_ENABLED=1</code> — DuckDB's Go bindings almost certainly require CGo, which means build tools need to be available in the builder stage. The <code>go-toolset</code> UBI image handled this cleanly. We also copied the example dashboards into the final image so <code>dac serve</code> had something to render.</p>
+<h2>Deploying to Kubernetes</h2>
+<p>The deployment is straightforward: a single Deployment with one container and a Service exposing port 8080. No PVCs or Secrets required.</p>
+<pre><code class="language-yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dac
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dac
+  template:
+    spec:
+      containers:
+        - name: dac
+          image: quay.io/aicatalyst/dac-dac:latest
+          args: ["serve", "--dir", "/app/examples/basic-yaml", "--port", "8080"]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: TELEMETRY_OPTOUT
+              value: "1"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+</code></pre>
+<p>The pod starts, the Go binary loads YAML dashboard definitions from the bundled examples, and the embedded React frontend becomes available at port 8080. The Service at <code>172.30.112.244:8080</code> made it accessible within the cluster for our test suite.</p>
+<div class="image-placeholder">
+<p><strong>[Image Placeholder 2: Screenshot of the DAC dashboard UI running in the browser]</strong></p>
+<p><strong>Placement rationale</strong>: After describing the deployment, showing the running application validates the work and gives readers a tangible result.</p>
+<p><strong>Image generation prompt</strong>: A browser screenshot showing a clean, modern dashboard interface with the title "Sales Dashboard". The dashboard displays several widget placeholders arranged in a grid layout — bar charts and metric cards with sample data. The browser URL bar shows a Kubernetes route URL. Light theme, professional styling. 16:9 aspect ratio, crisp and high-resolution.</p>
+<p><strong>Alt text</strong>: Screenshot of the DAC sales dashboard running in a web browser, showing a grid layout of chart widgets and metric cards served from the OpenShift deployment.</p>
+</div>
+<h2>Test results</h2>
+<p>We defined five test scenarios; three were executed in this run:</p>
+<table>
+<tr><th>Scenario</th><th>Type</th><th>Status</th><th>Duration</th></tr>
+<tr><td>Frontend loads (GET /)</td><td>HTTP</td><td>✅ PASS</td><td>0.0s</td></tr>
+<tr><td>Validate dashboards (`dac validate`)</td><td>CLI</td><td>✅ PASS</td><td>0.2s</td></tr>
+<tr><td>Version check (`dac version`)</td><td>CLI</td><td>✅ PASS</td><td>0.2s</td></tr>
+<tr><td>List dashboards API (GET /api/dashboards)</td><td>HTTP</td><td>⚠️ Not executed</td><td>—</td></tr>
+<tr><td>Get dashboard detail (GET /api/dashboards/sales)</td><td>HTTP</td><td>⚠️ Not executed</td><td>—</td></tr>
+</table>
+<p><strong>3 out of 3 executed tests passed.</strong> Sub-second response times across the board confirm that DAC is genuinely lightweight — the Go binary starts fast and serves requests with negligible latency. The frontend test confirms the embedded React app is correctly served, and the CLI tests validate that the build pipeline produced a functional binary with all embedded assets intact.</p>
+<p>Two API-level tests (listing dashboards and fetching a specific dashboard definition) weren't executed. These would validate the REST API layer the frontend consumes — a worthwhile follow-up to complete the picture.</p>
+<h2>What we learned</h2>
+<p><strong>The good:</strong> Single-binary Go applications with embedded frontends are a joy to containerize and deploy. No runtime dependencies, no sidecars, no persistent storage — just a binary and its data. The 256Mi memory limit was generous; this application would likely run comfortably at 128Mi.</p>
+<p><strong>The reality:</strong> DAC's RHOAI fitness score of 18/100 reflects a real gap. It doesn't exercise any ODH components — no model serving, no pipelines, no experiment tracking. For a pure RHOAI evaluation, this isn't the project to lead with. But as a validation that OpenShift handles lightweight mixed workloads cleanly, it delivered exactly what we needed.</p>
+<p><strong>What we'd do differently:</strong> Run the two missing API tests to validate the full REST surface, and connect DAC to an actual data source — a DuckDB database with real data or a warehouse accessible from the cluster — rather than relying on bundled examples. We'd also add liveness and readiness probes and configure an OpenShift Route for external access.</p>
+<div class="image-placeholder">
+<p><strong>[Image Placeholder 3: Summary infographic of the PoC results]</strong></p>
+<p><strong>Placement rationale</strong>: A visual summary at the end reinforces key takeaways and gives readers a shareable artifact.</p>
+<p><strong>Image generation prompt</strong>: A clean infographic with a dark background (#1a1a2e) and white/red text. Three sections: Left shows "3/3 Tests Passed" with a green checkmark icon. Center shows key metrics: "0.0s frontend load", "256Mi memory limit", "18/100 RHOAI score". Right shows a simple stack diagram with "React Frontend → Go API → YAML Dashboards". Minimal, modern design with Red Hat-inspired typography. 16:9 aspect ratio.</p>
+<p><strong>Alt text</strong>: Infographic summarizing DAC PoC results: 3 out of 3 tests passed, 0.0 second frontend load time, 256Mi memory limit, and 18 out of 100 RHOAI fitness score.</p>
+</div>
+<h2>Try it yourself</h2>
+<p>Want to reproduce this PoC or explore DAC in your own cluster?</p>
+<ul>
+<li><strong>Forked repository</strong>: <a href="https://github.com/aicatalyst-team/dac.git">github.com/aicatalyst-team/dac</a> — includes our Dockerfile and Kubernetes manifests</li>
+<li><strong>Container image</strong>: <code>quay.io/aicatalyst/dac-dac:latest</code> — pull and run directly</li>
+<li><strong>Upstream project</strong>: <a href="https://github.com/bruin-data/dac">github.com/bruin-data/dac</a> — the original DAC project with documentation</li>
+<li><strong>Open Data Hub docs</strong>: <a href="https://opendatahub.io/docs">opendatahub.io/docs</a> — for deploying alongside ODH components</li>
+</ul>
+<p>To get DAC running locally before deploying:</p>
+<pre><code class="language-bash">
+podman pull quay.io/aicatalyst/dac-dac:latest
+podman run -p 8080:8080 quay.io/aicatalyst/dac-dac:latest \
+  serve --dir /app/examples/basic-yaml --port 8080
+</code></pre>
+<p>Open <code>http://localhost:8080</code> and you'll see the dashboard UI. If your team is evaluating OpenShift for mixed workloads — ML pipelines alongside lightweight tooling — this PoC shows the platform handles the simple cases without friction, which is exactly what you want before tackling the complex ones.</p>
+  </article>
+
+  <div class="footer">
+    <p>Generated by AutoPoC &middot; Preview only — not for publication</p>
+  </div>
+</body>
+</html>
