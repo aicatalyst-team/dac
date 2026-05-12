@@ -66,4 +66,4 @@ RUN chgrp -R 0 /opt/app-root/src/node_modules && chmod -R g=u /opt/app-root/src/
 USER 1001
 
 ENTRYPOINT ["/usr/local/bin/dac"]
-CMD ["serve", "--host", "0.0.0.0", "--dir", "/app/examples/basic-yaml", "--port", "8080"]
+CMD ["serve", "--host=0.0.0.0", "--dir", "/app/examples/basic-yaml", "--port", "8080"]
