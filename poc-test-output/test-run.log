@@ -1,0 +1,220 @@
+================================================================================
+AutoPoC Test Run — dac
+Date: 2026-05-12T09:58:19.789810+00:00
+Total run_script invocations: 5
+================================================================================
+
+================================================================================
+RUN #1: /workspace/dac/poc_test.py
+STARTED: 2026-05-12T09:58:19.789810+00:00
+EXIT CODE: 1
+DURATION: 0.52s
+================================================================================
+
+--- STDOUT ---
+{
+  "results": [
+    {
+      "scenario_name": "frontend-loads",
+      "status": "pass",
+      "output": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/vite.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>DAC</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-DRrXyhzS.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-C0uzyT8f.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n",
+      "error_message": null,
+      "duration_seconds": 0.02
+    },
+    {
+      "scenario_name": "list-dashboards",
+      "status": "fail",
+      "output": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/vite.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>DAC</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-DRrXyhzS.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-C0uzyT8f.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n",
+      "error_message": "Response is not valid JSON",
+      "duration_seconds": 0.0
+    },
+    {
+      "scenario_name": "get-dashboard",
+      "status": "fail",
+      "output": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/vite.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>DAC</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-DRrXyhzS.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-C0uzyT8f.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n",
+      "error_message": "Response is not valid JSON",
+      "duration_seconds": 0.0
+    },
+    {
+      "scenario_name": "validate-dashboards",
+      "status": "pass",
+      "output": "  Sales Analytics: OK\n\n1 dashboard(s) validated successfully.\n",
+      "error_message": null,
+      "duration_seconds": 0.22
+    },
+    {
+      "scenario_name": "version-check",
+      "status": "pass",
+      "output": "container (container)\n",
+      "error_message": null,
+      "duration_seconds": 0.21
+    }
+  ]
+}
+
+
+--- STDERR ---
+Running: frontend-loads
+Running: list-dashboards
+Running: get-dashboard
+Running: validate-dashboards
+Running: version-check
+
+
+================================================================================
+RUN #2: /workspace/dac/poc_test.py
+STARTED: 2026-05-12T09:59:54.467173+00:00
+EXIT CODE: 1
+DURATION: 40.61s
+================================================================================
+
+--- STDOUT ---
+{
+  "results": [
+    {
+      "scenario_name": "frontend-loads",
+      "status": "pass",
+      "output": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/vite.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>DAC</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-DRrXyhzS.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-C0uzyT8f.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n",
+      "error_message": null,
+      "duration_seconds": 0.02
+    },
+    {
+      "scenario_name": "list-dashboards",
+      "status": "pass",
+      "output": "{\"dashboards\":[{\"name\":\"Sales Analytics\",\"description\":\"Real-time sales performance and revenue tracking\",\"connection\":\"local_duckdb\",\"widget_count\":11,\"filter_count\":2,\"row_count\":5}]}\n",
+      "error_message": null,
+      "duration_seconds": 0.01
+    },
+    {
+      "scenario_name": "get-dashboard",
+      "status": "fail",
+      "output": "{\"error\":\"dashboard not found: sales\"}\n",
+      "error_message": "HTTP error after 5 attempts: 404 Not Found",
+      "duration_seconds": 40.02
+    },
+    {
+      "scenario_name": "validate-dashboards",
+      "status": "pass",
+      "output": "  Sales Analytics: OK\n\n1 dashboard(s) validated successfully.\n",
+      "error_message": null,
+      "duration_seconds": 0.24
+    },
+    {
+      "scenario_name": "version-check",
+      "status": "pass",
+      "output": "container (container)\n",
+      "error_message": null,
+      "duration_seconds": 0.25
+    }
+  ]
+}
+
+
+--- STDERR ---
+Running: frontend-loads
+Running: list-dashboards
+Running: get-dashboard
+  Attempt 1/5 failed: HTTP 404. Retrying in 10s...
+  Attempt 2/5 failed: HTTP 404. Retrying in 10s...
+  Attempt 3/5 failed: HTTP 404. Retrying in 10s...
+  Attempt 4/5 failed: HTTP 404. Retrying in 10s...
+Running: validate-dashboards
+Running: version-check
+
+
+================================================================================
+RUN #3: /workspace/dac/poc_test.py
+STARTED: 2026-05-12T10:00:31.313229+00:00
+EXIT CODE: -1
+DURATION: 30.01s
+STATUS: TIMED OUT
+================================================================================
+
+--- STDOUT ---
+(empty)
+
+--- STDERR ---
+(empty)
+
+================================================================================
+RUN #4: /workspace/dac/quick_test.py
+STARTED: 2026-05-12T10:00:39.414021+00:00
+EXIT CODE: 0
+DURATION: 0.09s
+================================================================================
+
+--- STDOUT ---
+FAIL - Sales Analytics: URL can't contain control characters. '/api/v1/dashboards/Sales Analytics' (found at least ' ')
+OK 200 - Sales%20Analytics: {"schema":"https://getbruin.com/schemas/dac/dashboard/v1","name":"Sales Analytics","description":"Real-time sales performance and revenue tracking","connection":"local_duckdb","filters":[{"name":"regi
+FAIL - sales-analytics: HTTP Error 404: Not Found
+FAIL - sales_analytics: HTTP Error 404: Not Found
+
+
+--- STDERR ---
+(empty)
+
+================================================================================
+RUN #5: /workspace/dac/poc_test.py
+STARTED: 2026-05-12T10:01:25.419554+00:00
+EXIT CODE: 0
+DURATION: 0.54s
+================================================================================
+
+--- STDOUT ---
+{
+  "results": [
+    {
+      "scenario_name": "frontend-loads",
+      "status": "pass",
+      "output": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/vite.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>DAC</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-DRrXyhzS.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-C0uzyT8f.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n",
+      "error_message": null,
+      "duration_seconds": 0.02
+    },
+    {
+      "scenario_name": "list-dashboards",
+      "status": "pass",
+      "output": "{\"dashboards\":[{\"name\":\"Sales Analytics\",\"description\":\"Real-time sales performance and revenue tracking\",\"connection\":\"local_duckdb\",\"widget_count\":11,\"filter_count\":2,\"row_count\":5}]}\n",
+      "error_message": null,
+      "duration_seconds": 0.0
+    },
+    {
+      "scenario_name": "get-dashboard",
+      "status": "pass",
+      "output": "{\"schema\":\"https://getbruin.com/schemas/dac/dashboard/v1\",\"name\":\"Sales Analytics\",\"description\":\"Real-time sales performance and revenue tracking\",\"connection\":\"local_duckdb\",\"filters\":[{\"name\":\"region\",\"type\":\"select\",\"default\":\"All\",\"options\":{\"values\":[\"All\",\"North America\",\"Europe\",\"APAC\"]}},{\"name\":\"date_range\",\"type\":\"date-range\",\"default\":\"all_time\"}],\"queries\":{\"revenue_by_month\":{\"sql\":\"SELECT\\n    DATE_TRUNC('month', created_at) AS month,\\n    SUM(amount) AS revenue\\nFROM sales\\nWHERE created_at \\u003e= '{{ filters.date_range.start }}'\\n  AND created_at \\u003c= '{{ filters.date_range.end }}'\\n{% if filters.region != 'All' %}\\n  AND region = '{{ filters.region }}'\\n{% endif %}\\nGROUP BY 1\\nORDER BY 1\\n\",\"file\":\"queries/revenue_by_month.sql\"},\"total_revenue\":{\"sql\":\"SELECT SUM(amount) as value FROM sales\\nWHERE created_at \\u003e= '{{ filters.date_range.start }}'\\n  AND created_at \\u003c= '{{ filters.date_range.end }}'\\n{% if filters.region != 'All' %}\\n  AND region = '{{ filters.region }}'\\n{% endif %}\\n\"}},\"rows\":[{\"widgets\":[{\"name\":\"Total Revenue\",\"type\":\"metric\",\"col\":3,\"query\":\"total_revenue\",\"column\":\"value\",\"prefix\":\"$\",\"format\":\"number\"},{\"name\":\"Total Orders\",\"type\":\"metric\",\"col\":3,\"sql\":\"SELECT COUNT(*) as total FROM orders\\nWHERE created_at \\u003e= '{{ filters.date_range.start }}'\\n  AND created_at \\u003c= '{{ filters.date_range.end }}'\\n\",\"column\":\"total\",\"format\":\"number\"},{\"name\":\"Average Order Value\",\"type\":\"metric\",\"col\":3,\"sql\":\"SELECT ROUND(AVG(amount), 2) as avg_value FROM orders\\nWHERE created_at \\u003e= '{{ filters.date_range.start }}'\\n  AND created_at \\u003c= '{{ filters.date_range.end }}'\\n\",\"column\":\"avg_value\",\"prefix\":\"$\",\"format\":\"number\"},{\"name\":\"P90 Order Value\",\"type\":\"metric\",\"col\":3,\"sql\":\"SELECT ROUND(quantile_cont(amount, 0.9), 2) as p90_value FROM orders\\nWHERE created_at \\u003e= '{{ filters.date_range.start }}'\\n  AND created_at \\u003c= '{{ filters.date_range.end }}'\\n\",\"column\":\"p90_value\",\"prefix\":\"$\",\"format\":\"numbe",
+      "error_message": null,
+      "duration_seconds": 0.0
+    },
+    {
+      "scenario_name": "validate-dashboards",
+      "status": "pass",
+      "output": "  Sales Analytics: OK\n\n1 dashboard(s) validated successfully.\n",
+      "error_message": null,
+      "duration_seconds": 0.23
+    },
+    {
+      "scenario_name": "version-check",
+      "status": "pass",
+      "output": "container (container)\n",
+      "error_message": null,
+      "duration_seconds": 0.22
+    }
+  ]
+}
+
+
+--- STDERR ---
+Running: frontend-loads
+Running: list-dashboards
+Running: get-dashboard
+Running: validate-dashboards
+Running: version-check
+
+
+================================================================================
+PARSED RESULTS SUMMARY
+================================================================================
+Total: 3 | Pass: 3 | Fail: 0 | Error: 0 | Skip: 0
+
+  [PASS ] frontend-loads (0.0s)
+  [PASS ] validate-dashboards (0.2s)
+  [PASS ] version-check (0.2s)
