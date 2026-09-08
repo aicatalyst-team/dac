@@ -1,4 +1,10 @@
-# DAC
+> [!WARNING]
+> **This repository is archived.**
+>
+> Archived on 2026-09-08 by the AI Catalyst Platform Team.
+> It is read-only and no longer maintained.
+
+---# DAC
 
 DAC is a Dashboard-as-Code tool for defining, validating, and serving dashboards from YAML and TSX.
 - Dynamic charts, tabs, loops and conditionals with TSX.
